@@ -309,7 +309,7 @@ export function getFields(fields: string[], all?: string[]): string[] {
   if (!fields || fields.length === 0) {
     return undefined;
   }
-  const ext: string [] = [];
+  const ext: string[] = [];
   if (all) {
     for (const s of fields) {
       if (all.includes(s)) {
