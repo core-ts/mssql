@@ -15,23 +15,29 @@ export class PoolManager implements Manager {
     this.execScalar = this.execScalar.bind(this);
     this.count = this.count.bind(this);
   }
-  exec(q: string, args?: any[]): Promise<number> {
-    return exec(this.db, q, args);
+  exec(q: string, args?: any[], ctx?: any): Promise<number> {
+    const p = (ctx ? ctx : this.db);
+    return exec(p, q, args);
   }
-  execBatch(statements: Statement[], firstSuccess?: boolean): Promise<number> {
-    return execBatch(this.db, statements, firstSuccess);
+  execBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number> {
+    const p = (ctx ? ctx : this.db);
+    return execBatch(p, statements, firstSuccess);
   }
-  query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T[]> {
-    return query(this.db, q, args, m, fields);
+  query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
+    const p = (ctx ? ctx : this.db);
+    return query(p, q, args, m, fields);
   }
-  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T> {
-    return queryOne(this.db, q, args, m, fields);
+  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T> {
+    const p = (ctx ? ctx : this.db);
+    return queryOne(p, q, args, m, fields);
   }
-  execScalar<T>(q: string, args?: any[]): Promise<T> {
-    return execScalar<T>(this.db, q, args);
+  execScalar<T>(q: string, args?: any[], ctx?: any): Promise<T> {
+    const p = (ctx ? ctx : this.db);
+    return execScalar<T>(p, q, args);
   }
-  count(q: string, args?: any[]): Promise<number> {
-    return count(this.db, q, args);
+  count(q: string, args?: any[], ctx?: any): Promise<number> {
+    const p = (ctx ? ctx : this.db);
+    return count(p, q, args);
   }
 }
 export async function execBatch(db: sql.ConnectionPool, statements: Statement[], firstSuccess?: boolean): Promise<number> {

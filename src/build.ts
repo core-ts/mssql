@@ -105,10 +105,10 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
           x = buildParam(i++);
           if (typeof v === 'boolean') {
             if (v === true) {
-              const v2 = (attr.true ? '' + attr.true : '1');
+              const v2 = (attr.true ? '' + attr.true : `'1'`);
               args.push(v2);
             } else {
-              const v2 = (attr.false ? '' + attr.false : '0');
+              const v2 = (attr.false ? '' + attr.false : `'0'`);
               args.push(v2);
             }
           } else {
@@ -175,10 +175,10 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
           x = buildParam(i++);
           if (typeof v === 'boolean') {
             if (v === true) {
-              const v2 = (attr.true ? '' + attr.true : '1');
+              const v2 = (attr.true ? '' + attr.true : `'1'`);
               args.push(v2);
             } else {
-              const v2 = (attr.false ? '' + attr.false : '0');
+              const v2 = (attr.false ? '' + attr.false : `'0'`);
               args.push(v2);
             }
           } else {
@@ -217,10 +217,10 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
             const p = buildParam(i++);
             values.push(p);
             if (v === true) {
-              const v2 = (attr.true ? attr.true : '1');
+              const v2 = (attr.true ? attr.true : `'1'`);
               args.push(v2);
             } else {
-              const v2 = (attr.false ? attr.false : '0');
+              const v2 = (attr.false ? attr.false : `'0'`);
               args.push(v2);
             }
           }
