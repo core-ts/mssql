@@ -1,4 +1,4 @@
-import sql from 'mssql';
+import { ConnectionPool, Request, Transaction } from 'mssql';
 import { buildToSave, buildToSaveBatch } from './build';
 import { Attribute, Attributes, Manager, Statement, StringMap } from './metadata';
 
@@ -7,13 +7,18 @@ export class resource {
   static string?: boolean;
 }
 export class PoolManager implements Manager {
-  constructor(public db: sql.ConnectionPool) {
+  constructor(public db: ConnectionPool) {
+    this.param = this.param.bind(this);
     this.exec = this.exec.bind(this);
     this.execBatch = this.execBatch.bind(this);
     this.query = this.query.bind(this);
     this.queryOne = this.queryOne.bind(this);
     this.execScalar = this.execScalar.bind(this);
     this.count = this.count.bind(this);
+  }
+  driver = 'mssql';
+  param(i: number): string {
+    return '@' + i;
   }
   exec(q: string, args?: any[], ctx?: any): Promise<number> {
     const p = (ctx ? ctx : this.db);
@@ -27,7 +32,7 @@ export class PoolManager implements Manager {
     const p = (ctx ? ctx : this.db);
     return query(p, q, args, m, fields);
   }
-  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T> {
+  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T|null> {
     const p = (ctx ? ctx : this.db);
     return queryOne(p, q, args, m, fields);
   }
@@ -40,19 +45,19 @@ export class PoolManager implements Manager {
     return count(p, q, args);
   }
 }
-export async function execBatch(db: sql.ConnectionPool, statements: Statement[], firstSuccess?: boolean): Promise<number> {
+export async function execBatch(db: ConnectionPool, statements: Statement[], firstSuccess?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0);
   } else if (statements.length === 1) {
     return exec(db, statements[0].query, statements[0].params);
   }
   let c = 0;
-  const transaction = new sql.Transaction(db);
+  const transaction = new Transaction(db);
   if (firstSuccess) {
     try {
       const query0 = statements[0];
       const queries = statements.slice(1);
-      const request = new sql.Request(transaction);
+      const request = new Request(transaction);
       await transaction.begin();
       request.parameters = {};
       setParameters(request, query0.params);
@@ -75,7 +80,7 @@ export async function execBatch(db: sql.ConnectionPool, statements: Statement[],
     }
   } else {
     try {
-      const request = new sql.Request(transaction);
+      const request = new Request(transaction);
       await transaction.begin();
       for (const item of statements) {
         request.parameters = {};
@@ -101,26 +106,26 @@ function buildError(err: any): any {
   }
   return err;
 }
-export function exec(db: sql.ConnectionPool, q: string, args?: any[]): Promise<number> {
+export function exec(db: ConnectionPool, q: string, args?: any[]): Promise<number> {
   const request = db.request();
   setParameters(request, args);
   return request.query(q)
-    .then(results => results.rowsAffected[0])
-    .catch(err => {
+    .then((results: { rowsAffected: any[]; }) => results.rowsAffected[0])
+    .catch((err: any) => {
       buildError(err);
       throw err;
     });
 }
-export function query<T>(db: sql.ConnectionPool, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T[]> {
+export function query<T>(db: ConnectionPool, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T[]> {
   const request = db.request();
   setParameters(request, args);
-  return request.query(q)
+  return request.query<T>(q)
     .then(results => {
-      return handleResults(results.recordset, m, bools);
+      return handleResults<T>(results.recordset, m, bools);
     });
 }
 
-export function queryOne<T>(db: sql.ConnectionPool, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
+export function queryOne<T>(db: ConnectionPool, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
   return query<T[]>(db, q, args, m, bools)
     .then(results => {
       if (results && results.length > 0) {
@@ -132,21 +137,21 @@ export function queryOne<T>(db: sql.ConnectionPool, q: string, args?: any[], m?:
       throw err;
     });
 }
-export function execScalar<T>(db: sql.ConnectionPool, q: string, args?: any[]): Promise<T> {
+export function execScalar<T>(db: ConnectionPool, q: string, args?: any[]): Promise<T> {
   return queryOne<T>(db, q, args).then(r => {
     if (!r) {
       return null;
     } else {
       const keys = Object.keys(r);
-      return r[keys[0]];
+      return (r as any)[keys[0]];
     }
   });
 }
-export function count(db: sql.ConnectionPool, q: string, args?: any[]): Promise<number> {
+export function count(db: ConnectionPool, q: string, args?: any[]): Promise<number> {
   return execScalar<number>(db, q, args);
 }
-export function save<T>(db: sql.ConnectionPool|((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
-  const stm = buildToSave(obj, table, attrs, ver, buildParam, null, i);
+export function save<T>(db: ConnectionPool|((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
+  const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i);
   if (!stm) {
     return Promise.resolve(0);
   } else {
@@ -157,7 +162,7 @@ export function save<T>(db: sql.ConnectionPool|((sql: string, args?: any[]) => P
     }
   }
 }
-export function saveBatch<T>(db: sql.ConnectionPool|((statements: Statement[]) => Promise<number>), objs: T[], table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string): Promise<number> {
+export function saveBatch<T>(db: ConnectionPool|((statements: Statement[]) => Promise<number>), objs: T[], table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string): Promise<number> {
   const stmts = buildToSaveBatch(objs, table, attrs, ver, buildParam);
   if (!stmts || stmts.length === 0) {
     return Promise.resolve(0);
@@ -169,7 +174,7 @@ export function saveBatch<T>(db: sql.ConnectionPool|((statements: Statement[]) =
     }
   }
 }
-export function setParameters(request: sql.Request, args?: any[]): void {
+export function setParameters(request: Request, args?: any[]): void {
   if (args && args.length > 0) {
     const l = args.length;
     for (let i = 0; i < l; i++) {
@@ -251,16 +256,19 @@ export function handleBool<T>(objs: T[], bools: Attribute[]): T[] {
     return objs;
   }
   for (const obj of objs) {
+    const o: any = obj;
     for (const field of bools) {
-      const v = obj[field.name];
-      if (typeof v !== 'boolean' && v != null && v !== undefined) {
-        const b = field.true;
-        if (b == null || b === undefined) {
-          // tslint:disable-next-line:triple-equals
-          obj[field.name] = ('1' == v || 'T' == v || 'Y' == v || 'ON' == v);
-        } else {
-          // tslint:disable-next-line:triple-equals
-          obj[field.name] = (v == b ? true : false);
+      if (field.name) {
+        const v = o[field.name];
+        if (typeof v !== 'boolean' && v != null && v !== undefined) {
+          const b = field.true;
+          if (b == null || b === undefined) {
+            // tslint:disable-next-line:triple-equals
+            o[field.name] = ('1' == v || 'T' == v || 'Y' == v || 'ON' == v);
+          } else {
+            // tslint:disable-next-line:triple-equals
+            o[field.name] = (v == b ? true : false);
+          }
         }
       }
     }
@@ -275,16 +283,16 @@ export function map<T>(obj: T, m?: StringMap): any {
   if (mkeys.length === 0) {
     return obj;
   }
-  const obj2: any = {};
+  const o: any = {};
   const keys = Object.keys(obj);
   for (const key of keys) {
     let k0 = m[key];
     if (!k0) {
       k0 = key;
     }
-    obj2[k0] = obj[key];
+    o[k0] = (obj as any)[key];
   }
-  return obj2;
+  return o;
 }
 export function mapArray<T>(results: T[], m?: StringMap): T[] {
   if (!m) {
@@ -311,11 +319,11 @@ export function mapArray<T>(results: T[], m?: StringMap): T[] {
   }
   return objs;
 }
-export function getFields(fields: string[], all?: string[]): string[] {
+export function getFields(fields: string[], all?: string[]): string[]|undefined {
   if (!fields || fields.length === 0) {
     return undefined;
   }
-  const ext: string[] = [];
+  const ext: string [] = [];
   if (all) {
     for (const s of fields) {
       if (all.includes(s)) {
@@ -355,7 +363,7 @@ export function getMapField(name: string, mp?: StringMap): string {
 export function isEmpty(s: string): boolean {
   return !(s && s.length > 0);
 }
-export function version(attrs: Attributes): Attribute {
+export function version(attrs: Attributes): Attribute|undefined {
   const ks = Object.keys(attrs);
   for (const k of ks) {
     const attr = attrs[k];
@@ -368,12 +376,12 @@ export function version(attrs: Attributes): Attribute {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLWriter<T> {
-  db?: sql.ConnectionPool;
+  db?: ConnectionPool;
   exec?: (sql: string, args?: any[]) => Promise<number>;
   map?: (v: T) => T;
   param?: (i: number) => string;
   version?: string;
-  constructor(db: sql.ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), public table: string, public attributes: Attributes, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
+  constructor(db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), public table: string, public attributes: Attributes, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
     this.write = this.write.bind(this);
     if (typeof db === 'function') {
       this.exec = db;
@@ -404,7 +412,7 @@ export class SQLWriter<T> {
       if (this.exec) {
         return this.exec(stmt.query, stmt.params);
       } else {
-        return exec(this.db, stmt.query, stmt.params);
+        return exec(this.db as any, stmt.query, stmt.params);
       }
     } else {
       return Promise.resolve(0);
@@ -413,12 +421,12 @@ export class SQLWriter<T> {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLBatchWriter<T> {
-  pool?: sql.ConnectionPool;
+  pool?: ConnectionPool;
   version?: string;
   execute?: (statements: Statement[]) => Promise<number>;
   map?: (v: T) => T;
   param?: (i: number) => string;
-  constructor(db: sql.ConnectionPool | ((statements: Statement[]) => Promise<number>), public table: string, public attributes: Attributes, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
+  constructor(db: ConnectionPool | ((statements: Statement[]) => Promise<number>), public table: string, public attributes: Attributes, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
     this.write = this.write.bind(this);
     if (typeof db === 'function') {
       this.execute = db;
@@ -453,7 +461,7 @@ export class SQLBatchWriter<T> {
       if (this.execute) {
         return this.execute(stmts);
       } else {
-        return execBatch(this.pool, stmts);
+        return execBatch(this.pool as any, stmts);
       }
     } else {
       return Promise.resolve(0);
@@ -466,13 +474,11 @@ export interface AnyMap {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLChecker {
-  constructor(private db: sql.ConnectionPool, private service?: string, private timeout?: number) {
-    if (!this.timeout) {
-      this.timeout = 4200;
-    }
-    if (!this.service) {
-      this.service = 'sqlite';
-    }
+  timeout: number;
+  service: string;
+  constructor(private db: ConnectionPool, service?: string, timeout?: number) {
+    this.timeout = (timeout ? timeout : 4200);
+    this.service = (service ? service : 'mssql');
     this.check = this.check.bind(this);
     this.name = this.name.bind(this);
     this.build = this.build.bind(this);
@@ -480,7 +486,7 @@ export class SQLChecker {
   check(): Promise<AnyMap> {
     const obj = {} as AnyMap;
     const request = this.db.request();
-    const promise = request.query('select getdate();')
+    const promise = request.query('select getdate()')
       .then(results => results.recordset);
     if (this.timeout > 0) {
       return promiseTimeOut(this.timeout, promise);
