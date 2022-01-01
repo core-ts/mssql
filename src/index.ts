@@ -6,6 +6,7 @@ import { Attribute, Attributes, Manager, Statement, StringMap } from './metadata
 export class resource {
   static string?: boolean;
 }
+// tslint:disable-next-line:max-classes-per-file
 export class PoolManager implements Manager {
   constructor(public db: ConnectionPool) {
     this.param = this.param.bind(this);
@@ -142,7 +143,7 @@ export function execScalar<T>(db: ConnectionPool, q: string, args?: any[]): Prom
     if (!r) {
       return null;
     } else {
-      const keys = Object.keys(r);
+      const keys = Object.keys(r as any);
       return (r as any)[keys[0]];
     }
   });
@@ -279,12 +280,12 @@ export function map<T>(obj: T, m?: StringMap): any {
   if (!m) {
     return obj;
   }
-  const mkeys = Object.keys(m);
+  const mkeys = Object.keys(m as any);
   if (mkeys.length === 0) {
     return obj;
   }
   const o: any = {};
-  const keys = Object.keys(obj);
+  const keys = Object.keys(obj as any);
   for (const key of keys) {
     let k0 = m[key];
     if (!k0) {
@@ -298,7 +299,7 @@ export function mapArray<T>(results: T[], m?: StringMap): T[] {
   if (!m) {
     return results;
   }
-  const mkeys = Object.keys(m);
+  const mkeys = Object.keys(m as any);
   if (mkeys.length === 0) {
     return results;
   }
@@ -307,7 +308,7 @@ export function mapArray<T>(results: T[], m?: StringMap): T[] {
   for (let i = 0; i < length; i++) {
     const obj = results[i];
     const obj2: any = {};
-    const keys = Object.keys(obj);
+    const keys = Object.keys(obj as any);
     for (const key of keys) {
       let k0 = m[key];
       if (!k0) {
@@ -364,7 +365,7 @@ export function isEmpty(s: string): boolean {
   return !(s && s.length > 0);
 }
 export function version(attrs: Attributes): Attribute|undefined {
-  const ks = Object.keys(attrs);
+  const ks = Object.keys(attrs as any);
   for (const k of ks) {
     const attr = attrs[k];
     if (attr.version) {
@@ -416,6 +417,74 @@ export class SQLWriter<T> {
       }
     } else {
       return Promise.resolve(0);
+    }
+  }
+}
+// tslint:disable-next-line:max-classes-per-file
+export class SQLStreamWriter<T> {
+  list: T[] = [];
+  size: number = 0;
+  pool?: ConnectionPool;
+  version?: string;
+  execBatch?: (statements: Statement[]) => Promise<number>;
+  map?: (v: T) => T;
+  param?: (i: number) => string;
+  constructor(pool: ConnectionPool | ((statements: Statement[]) => Promise<number>), public table: string, public attributes: Attributes, size?: number, toDB?: (v: T) => T, buildParam?: (i: number) => string) {
+    this.write = this.write.bind(this);
+    this.flush = this.flush.bind(this);
+    if (typeof pool === 'function') {
+      this.execBatch = pool;
+    } else {
+      this.pool = pool;
+    }
+    this.param = buildParam;
+    this.map = toDB;
+    const x = version(attributes);
+    if (x) {
+      this.version = x.name;
+    }
+    if (size) {
+      this.size = size;
+    }
+  }
+  write(obj: T): Promise<number> {
+    if (!obj) {
+      return Promise.resolve(0);
+    }
+    let obj2: NonNullable<T> | T = obj;
+    if (this.map) {
+      obj2 = this.map(obj);
+      this.list.push(obj2);
+    } else {
+      this.list.push(obj);
+    }
+    if (this.list.length < this.size) {
+      return Promise.resolve(0);
+    } else {
+      return this.flush();
+    }
+  }
+  flush(): Promise<number> {
+    if (!this.list || this.list.length === 0) {
+      return Promise.resolve(0);
+    } else {
+      const total = this.list.length;
+      const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.version, this.param);
+      if (stmt) {
+        if (this.execBatch) {
+          return this.execBatch(stmt).then(r => {
+            this.list = [];
+            return total;
+          });
+        } else {
+          return execBatch(this.pool as any, stmt).then(r => {
+            this.list = [];
+            return total;
+          });
+        }
+      } else {
+        return Promise.resolve(0);
+      }
     }
   }
 }

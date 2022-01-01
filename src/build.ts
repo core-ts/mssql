@@ -22,7 +22,7 @@ export interface Metadata {
 }
 export function metadata(attrs: Attributes): Metadata {
   const mp: StringMap = {};
-  const ks = Object.keys(attrs);
+  const ks = Object.keys(attrs as any);
   const ats: Attribute[] = [];
   const bools: Attribute[] = [];
   const fields: string[] = [];
@@ -70,7 +70,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
   const values: string[] = [];
   const args: any[] = [];
   let isVersion = false;
-  const ks = Object.keys(attrs);
+  const ks = Object.keys(attrs as any);
   if (!pks) {
     pks = [];
     for (const k of ks) {
@@ -274,7 +274,7 @@ export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes,
     buildParam = param;
   }
   const sts: Statement[] = [];
-  const ks = Object.keys(attrs);
+  const ks = Object.keys(attrs as any);
   const pks: Attribute[] = [];
   for (const k of ks) {
     const attr = attrs[k];
