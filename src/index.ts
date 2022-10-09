@@ -382,7 +382,7 @@ export class SQLWriter<T> {
   map?: (v: T) => T;
   param?: (i: number) => string;
   version?: string;
-  constructor(db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), public table: string, public attributes: Attributes, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
+  constructor(db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), public table: string, public attributes: Attributes, public oneIfSuccess?: boolean, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
     this.write = this.write.bind(this);
     if (typeof db === 'function') {
       this.exec = db;
@@ -411,9 +411,17 @@ export class SQLWriter<T> {
     const stmt = buildToSave(obj2, this.table, this.attributes, this.version, this.param);
     if (stmt) {
       if (this.exec) {
-        return this.exec(stmt.query, stmt.params);
+        if (this.oneIfSuccess) {
+          return this.exec(stmt.query, stmt.params).then(ct => ct > 0 ? 1 : 0);
+        } else {
+          return this.exec(stmt.query, stmt.params);
+        }
       } else {
-        return exec(this.db as any, stmt.query, stmt.params);
+        if (this.oneIfSuccess) {
+          return exec(this.db as any, stmt.query, stmt.params).then(ct => ct > 0 ? 1 : 0);
+        } else {
+          return exec(this.db as any, stmt.query, stmt.params);
+        }
       }
     } else {
       return Promise.resolve(0);
@@ -495,7 +503,7 @@ export class SQLBatchWriter<T> {
   execute?: (statements: Statement[]) => Promise<number>;
   map?: (v: T) => T;
   param?: (i: number) => string;
-  constructor(db: ConnectionPool | ((statements: Statement[]) => Promise<number>), public table: string, public attributes: Attributes, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
+  constructor(db: ConnectionPool | ((statements: Statement[]) => Promise<number>), public table: string, public attributes: Attributes, public oneIfSuccess?: boolean, toDB?: (v: T) => T, buildParam?: (i: number) => string, ver?: string) {
     this.write = this.write.bind(this);
     if (typeof db === 'function') {
       this.execute = db;
@@ -528,9 +536,17 @@ export class SQLBatchWriter<T> {
     const stmts = buildToSaveBatch(list, this.table, this.attributes, this.version, this.param);
     if (stmts && stmts.length > 0) {
       if (this.execute) {
-        return this.execute(stmts);
+        if (this.oneIfSuccess) {
+          return this.execute(stmts).then(ct => stmts.length);
+        } else {
+          return this.execute(stmts);
+        }
       } else {
-        return execBatch(this.pool as any, stmts);
+        if (this.oneIfSuccess) {
+          return execBatch(this.pool as any, stmts).then(ct => stmts.length);
+        } else {
+          return execBatch(this.pool as any, stmts);
+        }
       }
     } else {
       return Promise.resolve(0);
