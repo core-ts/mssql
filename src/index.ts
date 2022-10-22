@@ -3,6 +3,7 @@ import { buildToSave, buildToSaveBatch } from './build';
 import { Attribute, Attributes, Manager, Statement, StringMap } from './metadata';
 
 export * from './metadata';
+export * from './build';
 
 // tslint:disable-next-line:class-name
 export class resource {
