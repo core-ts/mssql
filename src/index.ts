@@ -2,6 +2,8 @@ import { ConnectionPool, Request, Transaction } from 'mssql';
 import { buildToSave, buildToSaveBatch } from './build';
 import { Attribute, Attributes, Manager, Statement, StringMap } from './metadata';
 
+export * from './metadata';
+
 // tslint:disable-next-line:class-name
 export class resource {
   static string?: boolean;
@@ -404,7 +406,7 @@ export class SQLWriter<T> {
     if (!obj) {
       return Promise.resolve(0);
     }
-    let obj2 = obj;
+    let obj2: NonNullable<T> | T = obj;
     if (this.map) {
       obj2 = this.map(obj);
     }
@@ -431,7 +433,7 @@ export class SQLWriter<T> {
 // tslint:disable-next-line:max-classes-per-file
 export class SQLStreamWriter<T> {
   list: T[] = [];
-  size: number = 0;
+  size = 0;
   pool?: ConnectionPool;
   version?: string;
   execBatch?: (statements: Statement[]) => Promise<number>;
@@ -602,4 +604,172 @@ function promiseTimeOut(timeoutInMilliseconds: number, promise: Promise<any>): P
       }, timeoutInMilliseconds);
     })
   ]);
+}
+export interface QueryBuilder {
+  buildQuery(ctx?: any): Promise<Statement>;
+}
+export interface Formatter<T> {
+  format: (row: T) => string;
+}
+export interface FileWriter {
+  write(chunk: string): boolean;
+  flush?(cb?: () => void): void;
+  end?(cb?: () => void): void;
+}
+// tslint:disable-next-line:max-classes-per-file
+export class Exporter<T> {
+  constructor(
+    public pool: ConnectionPool,
+    public buildQuery: (ctx?: any) => Promise<Statement>,
+    public format: (row: T) => string,
+    public write: (chunk: string) => boolean,
+    public end: (cb?: () => void) => void,
+    public attributes?: Attributes
+  ) {
+    if (attributes) {
+      this.map = buildMap(attributes);
+    }
+    this.export = this.export.bind(this);
+  }
+  map?: StringMap;
+  async export(ctx?: any): Promise<number> {
+    let i = 0;
+    const pool = await this.pool.connect();
+    const stmt = await this.buildQuery(ctx);
+    const request = pool.request();
+    request.stream = true;
+    request.query(stmt.query);
+    request.on('row', row => {
+      if (this.map) {
+          i++;
+          const obj = mapOne<T>(row, this.map);
+          const str = this.format(obj);
+          this.write(str);
+      } else {
+          i++;
+          const str = this.format(row);
+          this.write(str);
+      }
+    });
+    let er: any;
+    request.on('error', err => {
+      er = err;
+      console.log(err);
+    });
+    return new Promise<number>((resolve, reject) => {
+      request.on('done', res => {
+        this.end();
+        if (er) {
+          reject(er);
+        } else {
+          resolve(i);
+        }
+      });
+    });
+  }
+}
+// tslint:disable-next-line:max-classes-per-file
+export class ExportService<T> {
+  constructor(
+    public pool: ConnectionPool,
+    public queryBuilder: QueryBuilder,
+    public formatter: Formatter<T>,
+    public writer: FileWriter,
+    public attributes?: Attributes
+  ) {
+    if (attributes) {
+      this.map = buildMap(attributes);
+    }
+    this.export = this.export.bind(this);
+  }
+  map?: StringMap;
+  async export(ctx?: any): Promise<number> {
+    let i = 0;
+    const pool = await this.pool.connect();
+    const stmt = await this.queryBuilder.buildQuery(ctx);
+    const request = pool.request();
+    request.stream = true;
+    request.query(stmt.query);
+    request.on('row', row => {
+      if (this.map) {
+          i++;
+          const obj = mapOne<T>(row, this.map);
+          const str = this.formatter.format(obj);
+          this.writer.write(str);
+      } else {
+          i++;
+          const str = this.formatter.format(row);
+          this.writer.write(str);
+      }
+    });
+    let er: any;
+    request.on('error', err => {
+      er = err;
+      console.log(err);
+    });
+    return new Promise<number>((resolve, reject) => {
+      request.on('done', res => {
+        if (this.writer.end) {
+          this.writer.end();
+        } else if (this.writer.flush) {
+          this.writer.flush();
+        }
+        if (er) {
+          reject(er);
+        } else {
+          resolve(i);
+        }
+      });
+    });
+  }
+}
+export function mapOne<T>(result: any, m?: StringMap): T {
+  const obj: any = result;
+  if (!m) {
+    return obj;
+  }
+  const mkeys = Object.keys(m as any);
+  if (mkeys.length === 0) {
+    return obj;
+  }
+  const obj2: any = {};
+  const keys = Object.keys(obj);
+  for (const key of keys) {
+    let k0 = m[key];
+    if (!k0) {
+      k0 = key;
+    }
+    obj2[k0] = (obj)[key];
+  }
+  return obj2;
+}
+export function buildMap(attrs: Attributes): StringMap|undefined {
+  const mp: StringMap = {};
+  const ks = Object.keys(attrs);
+  let isMap = false;
+  for (const k of ks) {
+    const attr = attrs[k];
+    attr.name = k;
+    const field = (attr.column ? attr.column : k);
+    const s = field.toLowerCase();
+    if (s !== k) {
+      mp[s] = k;
+      isMap = true;
+    }
+  }
+  if (isMap) {
+    return mp;
+  }
+  return undefined;
+}
+export function select(table: string, attrs: Attributes): string {
+  const cols: string[] = [];
+  const ks = Object.keys(attrs);
+  for (const k of ks) {
+    const attr = attrs[k];
+    attr.name = k;
+    const field = (attr.column ? attr.column : k);
+    cols.push(field);
+  }
+  return `select ${cols.join(',')} from ${table}`;
 }

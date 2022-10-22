@@ -1,1 +1,1 @@
-# mssql
+# mssql-core
