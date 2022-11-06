@@ -94,7 +94,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
           return undefined;
         } else {
           const attr = attrs[pk.name];
-          const field = (attr.field ? attr.field : pk.name);
+          const field = (attr.column ? attr.column : pk.name);
           let x: string;
           if (v == null) {
             x = 'null';
@@ -126,7 +126,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
       if (v !== undefined) {
         const attr = attrs[k];
         if (!attr.key && !attr.ignored && k !== ver && !attr.noupdate) {
-          const field = (attr.field ? attr.field : k);
+          const field = (attr.column ? attr.column : k);
           let x: string;
           if (v == null) {
             x = 'null';
@@ -167,7 +167,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
           break;
         } else {
           const attr = attrs[pk.name];
-          const field = (attr.field ? attr.field : pk.name);
+          const field = (attr.column ? attr.column : pk.name);
           let x: string;
           if (v == null) {
             x = 'null';
@@ -201,7 +201,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
       v = attr.default;
     }
     if (v !== undefined && v != null && !attr.ignored && !attr.noinsert) {
-      const field = (attr.field ? attr.field : k);
+      const field = (attr.column ? attr.column : k);
       cols.push(field);
       if (k === ver) {
         isVersion = true;
@@ -242,7 +242,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
   }
   if (!isVersion && ver && ver.length > 0) {
     const attr = attrs[ver];
-    const field = (attr.field ? attr.field : ver);
+    const field = (attr.column ? attr.column : ver);
     cols.push(field);
     values.push(`${1}`);
   }
@@ -255,13 +255,13 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
       if (typeof v === 'number' && !isNaN(v)) {
         const attr = attrs[ver];
         if (attr) {
-          const field = (attr.field ? attr.field : ver);
+          const field = (attr.column ? attr.column : ver);
           colSet.push(`${field}=${(1 + v)}`);
           colQuery.push(`${field}=${v}`);
         }
       }
     }
-    const field1 = (pks[0].field ? pks[0].field : pks[0].name);
+    const field1 = (pks[0].column ? pks[0].column : pks[0].name);
     const query = `if exists (select ${field1} from ${table} where ${colQuery0.join(' and ')})
  update ${table} set ${colSet.join(',')} where ${colQuery.join(' and ')}
 else
