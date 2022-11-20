@@ -1,14 +1,10 @@
 import { ConnectionPool, Request, Transaction } from 'mssql';
-import { buildToSave, buildToSaveBatch } from './build';
+import { buildToSave, buildToSaveBatch, resource } from './build';
 import { Attribute, Attributes, Manager, Statement, StringMap } from './metadata';
 
 export * from './metadata';
 export * from './build';
 
-// tslint:disable-next-line:class-name
-export class resource {
-  static string?: boolean;
-}
 // tslint:disable-next-line:max-classes-per-file
 export class PoolManager implements Manager {
   constructor(public db: ConnectionPool) {

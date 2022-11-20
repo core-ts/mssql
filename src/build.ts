@@ -1,5 +1,10 @@
 import {Attribute, Attributes, Statement, StringMap} from './metadata';
 
+// tslint:disable-next-line:class-name
+export class resource {
+  static string?: boolean;
+  static ignoreDatetime?: boolean;
+}
 export function param(i: number): string {
   return '@' + i;
 }
@@ -152,8 +157,12 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
               }
             }
           } else {
-            x = buildParam(i++);
-            args.push(v);
+            if (resource.ignoreDatetime && typeof v === 'string' && attr.type === 'datetime') {
+              x = `'${v}'`;
+            } else {
+              x = buildParam(i++);
+              args.push(v);
+            }
           }
           colSet.push(`${field}=${x}`);
         }
@@ -230,9 +239,13 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
             }
           }
         } else {
-          const p = buildParam(i++);
-          values.push(p);
-          args.push(v);
+          if (resource.ignoreDatetime && typeof v === 'string' && attr.type === 'datetime') {
+            values.push(`'${v}'`);
+          } else {
+            const p = buildParam(i++);
+            values.push(p);
+            args.push(v);
+          }
         }
       }
     }
