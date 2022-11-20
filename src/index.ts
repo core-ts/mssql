@@ -770,3 +770,93 @@ export function select(table: string, attrs: Attributes): string {
   }
   return `select ${cols.join(',')} from ${table}`;
 }
+export function dateToString(date: Date, separator?: string): string {
+  const year = date.getFullYear().toString();
+  let month: number | string = date.getMonth() + 1;
+  let dt: number | string = date.getDate();
+
+  if (dt < 10) {
+    dt = '0' + dt.toString();
+  }
+  if (month < 10) {
+    month = '0' + month;
+  }
+  if (separator !== undefined) {
+    return year + separator + month + separator + dt;
+  } else {
+    return year + month + dt;
+  }
+}
+export function timeToString(date: Date, separator?: string): string {
+  let hh: number | string = date.getHours();
+  let mm: number | string = date.getMinutes();
+  let ss: number | string = date.getSeconds();
+  if (hh < 10) {
+    hh = '0' + hh.toString();
+  }
+  if (ss < 10) {
+    ss = '0' + ss.toString();
+  }
+  if (mm < 10) {
+    mm = '0' + mm;
+  }
+  if (separator !== undefined) {
+    return hh.toString() + separator + mm + separator + ss;
+  } else {
+    return hh.toString() + mm + ss;
+  }
+}
+export function toISOString(d: Date): string {
+  const s = `${dateToString(d, '-')}T${timeToString(d, ':')}.${getMilliseconds(d)}${getTimezone(d)}`;
+  return s;
+}
+export function getTimezone(d: Date): string {
+  const t = d.getTimezoneOffset() / 60;
+  const p = d.getTimezoneOffset() % 60;
+  if (t > 0) {
+    return t > -10
+      ? '-0' + Math.abs(t) + ':00'
+      : '-' + Math.abs(t) + ':' + getMinutes(p);
+  } else {
+    return t < 9
+      ? '+0' + Math.abs(t) + ':00'
+      : Math.abs(t).toString() + ':' + getMinutes(p);
+  }
+}
+export function getMinutes(p: number): string {
+  const x = Math.abs(p);
+  return x >= 10 ? x.toString() : '0' + x;
+}
+export function getMilliseconds(d: Date): string {
+  const m = d.getMilliseconds();
+  if (m >= 100) {
+    return m.toString();
+  } else if (m >= 10) {
+    return '0' + m;
+  } else {
+    return '00' + m;
+  }
+}
+export function getFieldsByType(attrs: Attributes, t: string): string[] {
+  const fis: string[] = [];
+  const keys = Object.keys(attrs);
+  for (const key of keys) {
+    const attr = attrs[key];
+    if (attr.type === t) {
+      fis.push(key);
+    }
+  }
+  return fis;
+}
+export function reformatDates(obj: any, ignores: string[]): any {
+  const keys = Object.keys(obj);
+  for (const key of keys) {
+    const v = obj[key];
+    if (v instanceof Date) {
+      if (!ignores.includes(key)) {
+        obj[key] = toISOString(v);
+      }
+    }
+  }
+  return obj;
+}
