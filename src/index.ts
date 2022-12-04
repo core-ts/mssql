@@ -848,8 +848,8 @@ export function getFieldsByType(attrs: Attributes, t: string): string[] {
   }
   return fis;
 }
-export function reformatDates(obj: any, ignores: string[], dateToString?: (d: Date) => string): any {
-  const toS = dateToString ? dateToString : toISOString;
+export function reformatDates(obj: any, ignores: string[], dToString?: (d: Date) => string): any {
+  const toS = dToString ? dToString : toISOString;
   const keys = Object.keys(obj);
   for (const key of keys) {
     const v = obj[key];
