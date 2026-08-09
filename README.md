@@ -10,54 +10,196 @@ Whether you're building a REST API, microservice, ETL pipeline, or batch process
 
 ---
 
+## Features
+
+* Built on the official [`mssql`](https://www.npmjs.com/package/mssql) driver
+* Reuses `Repository` and `CRUDRepository` from [`sql-core`](https://www.npmjs.com/package/sql-core)
+* Works seamlessly with [`query-mappers`](https://www.npmjs.com/package/query-mappers)
+* Metadata-driven CRUD operations
+* Batch insert and update
+* Stream processing for large datasets
+* Optimistic locking
+* Transaction support
+* SQL Server health check for Kubernetes
+* TypeScript first
+* Lightweight with no ORM
+ 
+---
+
+## Installation
+
+```bash
+npm install mssql-core
+```
+
 ## Why mssql-core?
+Most SQL libraries are either:
 
-Most applications don't need a heavyweight ORM.
+- Low-level drivers ([`mssql`](https://www.npmjs.com/package/mssql))
+- Full-featured ORMs (TypeORM, Prisma, Sequelize)
 
-They need a library that is:
+This library focuses on infrastructure.
 
-* Fast
-* Predictable
-* Easy to debug
-* Easy to maintain
-* Suitable for enterprise architecture
+It provides:
 
-`mssql-core` is designed with these goals in mind.
+- Connection management
+- Transactions
+- Repository integration
+- Batch execution
+- Streaming
 
-## Built for Enterprise Applications
+without hiding SQL from developers.
 
-`mssql-core` is ideal for:
+Moreover, [`mssql-core`](https://www.npmjs.com/package/mssql-core) can work with [`sql-core`](https://www.npmjs.com/package/sql-core) and [`query-mappers`](https://www.npmjs.com/package/query-mappers). They separate responsibilities into independent layers.
 
-* REST APIs
-* Microservices
-* Batch jobs
-* Import services
-* Export services
-* ETL pipelines
-* Back-office systems
-* Financial applications
-* Healthcare systems
-* Government applications
+* SQL generation belongs to [`sql-core`](https://www.npmjs.com/package/sql-core)
+* Object mapping belongs to [`query-mappers`](https://www.npmjs.com/package/query-mappers)
+* SQL Server execution belongs to [`mssql-core`](https://www.npmjs.com/package/mssql-core)
+
+This architecture keeps applications lightweight, modular, and easy to maintain.
+
+
+## Ecosystem
+
+```text
+       Application
+            │
+            ▼
+       Repository
+       (sql-core)
+            │
+            ▼
+        mssql-core
+            │
+            ▼
+        SQL Server
+```
+
+### Responsibilities
+
+| Package                                                        | Responsibility                                                        |
+|----------------------------------------------------------------|-----------------------------------------------------------------------|
+| [`sql-core`](https://www.npmjs.com/package/sql-core)           | Database-independent repositories, CRUD, SQL builders, transactions   |
+| [`query-mappers`](https://www.npmjs.com/package/query-mappers) | Maps database rows to TypeScript models                               |
+| [`mssql-core`](https://www.npmjs.com/package/mssql-core)       | SQL Server execution, repositories, writers, streaming, health checks |
+| [`mysql2-core`](https://www.npmjs.com/package/mysql2-core)     | My SQL execution, repositories, writers, streaming, health checks     |
+| [`postgres-kit`](https://www.npmjs.com/package/postgres-kit)   | PostgreSQL execution, repositories, writers, streaming, health checks |
 
 ---
 
-# Features
+## Metadata-driven Persistence
 
-## Metadata-Driven SQL
+CRUD operations are generated from metadata instead of handwritten SQL.
 
-Define your entity metadata once.
+Supports:
 
-Reuse it everywhere.
+* Primary keys
+* Version fields
+* Read-only fields
+* Insert-only fields
+* Update-only fields
+* Automatic SQL generation
 
-* SQL generation
-* Object mapping
-* Insert
+---
+
+## Core Components
+
+### SQL Server Execution
+
+Execute SQL statements using SQL Server.
+
+* Transaction support
+* Query execution
+* Command execution
+* Prepared statements
+
+#### Transactions
+
+```text
+Begin Transaction
+
+       ↓
+
+Execute Commands
+
+       ↓
+
+Commit / Rollback
+```
+
+Supports SQL Server transactions using the abstractions defined in [`sql-core`](https://www.npmjs.com/package/sql-core).
+
+```ts
+const tx = await db.beginTransaction()
+
+try {
+    await tx.execute(
+        `INSERT INTO users(name) VALUES(@p1)`,
+        ["John"]
+    )
+    await tx.commit()
+}
+catch (err) {
+    await tx.rollback()
+}
+```
+
+#### Query
+
+Rows are automatically mapped into TypeScript objects.
+
+```ts
+interface User {
+    id: number
+    name: string
+    active: boolean
+}
+```
+
+```ts
+const users = await db.query<User>(sql)
+```
+
+#### Execute
+
+```ts
+await db.execute(
+    `UPDATE users SET active = @p1 WHERE id = @p2`
+    ['A', 10]
+)
+```
+
+---
+
+#### Batch Execution
+
+```ts
+await db.executeBatch([
+    {
+        query: "INSERT INTO users(name) VALUES(@p1)",
+        params: ["John"]
+    },
+    {
+        query: "INSERT INTO users(name) VALUES(@p1)",
+        params: ["Jane"]
+    }
+])
+```
+
+### Repository
+
+`mssql-core` provides SQL Server implementations that reuse the generic repositories from[`sql-core`](https://www.npmjs.com/package/sql-core).
+
+Features include:
+
+* Create
 * Update
-* Save
-* Batch processing
-* Export
-
-No duplicated mapping configuration.
+* Delete
+* Find by id
+* Search
+* Paging
+* Sorting
+* Optimistic locking
 
 ---
 
@@ -84,6 +226,101 @@ await writer.write(user)
 The library automatically determines whether the entity should be inserted or updated based on its metadata.
 
 No duplicated business logic.
+
+---
+
+## Optimistic Locking
+
+Version columns are automatically detected from metadata.
+
+
+CRUDRepository in [`sql-core`](https://www.npmjs.com/package/sql-core) fully supports optimistic locking.
+
+When a schema defines a version field, sql-core automatically generates update statements that verify the current version before modifying data.
+
+For example:
+
+```sql
+UPDATE users
+SET
+    name = @p1,
+    version = version + 1
+WHERE
+    id = @p2
+AND version = @p3
+```
+
+If another transaction has already updated the record, the update affects zero rows, allowing the application to detect concurrent modifications.
+
+This prevents lost updates without requiring pessimistic database locks.
+
+---
+
+## Health Check
+
+Monitor SQL Server availability.
+
+```typescript
+const checker = new SQLChecker(pool);
+const result = await checker.check();
+```
+
+Designed for:
+
+* Kubernetes readiness probes
+* Kubernetes liveness probes
+* Cloud-native deployments
+* Production monitoring
+
+Example response:
+
+```json
+{
+  "status": "UP",
+  "details": {
+    "mssql": {
+      "status": "UP"
+    }
+  }
+}
+```
+
+## Integration with query-mappers
+
+`query-mappers` converts SQL Server rows into strongly typed TypeScript models.
+
+```text
+SQL Server Row
+
+       ↓
+
+ query-mappers
+
+       ↓
+
+TypeScript Object
+```
+
+## Designed for Enterprise Applications
+
+`mssql-core` is suitable for:
+
+* REST APIs
+* Microservices
+* Batch processing
+* ETL pipelines
+* Event-driven systems
+* Cloud-native applications
+
+## Advantages
+
+* No ORM overhead
+* Reusable repositories
+* Modular architecture
+* High performance
+* Strong TypeScript support
+* Easy to test
+* Clean separation of responsibilities
 
 ---
 
@@ -148,58 +385,24 @@ Both APIs stream rows directly from SQL Server for maximum performance.
 `mssql-core` integrates seamlessly with **export-kit**.
 
 ```text
-SQL Server
+ SQL Server
+     │
+     ▼
+  Exporter
+     │
+     ▼
+ Formatter<T>
       │
       ▼
-Exporter
+ FileWriter
       │
       ▼
-Formatter<T>
-      │
-      ▼
-FileWriter
-      │
-      ▼
-CSV
-Fixed-Length File
+CSV / Fixed-Length File
 ```
 
 `export-kit` handles file generation while `mssql-core` focuses on efficient database access.
 
 This separation keeps your application modular and reusable.
-
----
-
-## Optimistic Locking
-
-Protect your data from concurrent updates.
-
-Simply define a version field in your metadata.
-
-The generated SQL automatically performs optimistic locking.
-
-No additional business logic required.
-
----
-
-## Transaction Support
-
-Execute multiple operations safely within a transaction.
-
-Perfect for business workflows that require consistency.
-
----
-
-## Health Check
-
-Monitor SQL Server availability.
-
-Designed for:
-
-* Kubernetes readiness probes
-* Kubernetes liveness probes
-* Cloud-native deployments
-* Production monitoring
 
 ---
 
@@ -221,86 +424,33 @@ It simply provides reusable building blocks for modern applications.
 
 ```text
 Application
-        │
-        ▼
+     │
+     ▼
 Repository
-        │
-        ▼
+     │
+     ▼
 mssql-core
-        │
-        ▼
+     │
+     ▼
 SQL Server
 ```
 
 For exporting data:
 
 ```text
-SQL Server
-        │
-        ▼
-Exporter / ExportService
-        │
-        ▼
-export-kit
-        │
-        ▼
+  SQL Server
+       │
+       ▼
+ ExportService
+       │
+       ▼
+  export-kit
+       │
+       ▼
 CSV / Fixed-Length File
 ```
 
 Each library has a single responsibility.
-
----
-
-# Designed Around Reusable Components
-
-The library is built from composable building blocks.
-
-* SQL generation
-* Save operations
-* Batch processing
-* Streaming processing
-* Exporting
-* Transactions
-* Health checking
-* Object mapping
-
-Use only the components your application needs.
-
----
-
-# Why Developers Choose mssql-core
-
-✅ Explicit SQL
-
-✅ High performance
-
-✅ Streaming support
-
-✅ Batch processing
-
-✅ Smart save
-
-✅ Optimistic locking
-
-✅ Metadata reuse
-
-✅ Enterprise architecture
-
-✅ Low memory usage
-
-✅ Strong TypeScript support
-
----
-
-# Related Libraries
-
-The library is part of the **core-ts** ecosystem.
-
-* **sql-core** — SQL generation and repository utilities
-* **export-kit** — Streaming file export framework
-* **query-mappers** — Object mapping utilities
-
-Together, these libraries help you build scalable, maintainable enterprise applications.
 
 ---
 
