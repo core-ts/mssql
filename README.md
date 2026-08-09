@@ -1,141 +1,153 @@
 # mssql-core
 
-A lightweight, metadata-driven SQL Server library for TypeScript applications.
+> A lightweight, high-performance SQL Server library for TypeScript applications.
 
-`mssql-core` provides high-performance data access, batch processing, streaming import/export, optimistic locking, and health checking without requiring an ORM. It is designed for enterprise applications that prefer explicit SQL, strong typing, and reusable metadata.
+`mssql-core` helps you build enterprise applications on Microsoft SQL Server without the complexity of a traditional ORM.
 
-## Features
+Instead of hiding SQL behind decorators, proxies, and entity tracking, `mssql-core` provides explicit SQL generation, metadata-driven mapping, streaming processing, optimistic locking, and reusable data access components.
 
-* Metadata-driven SQL generation
-* Insert, update and save operations
-* Batch insert and batch save
-* Streaming database writer
-* Streaming data exporter
-* Optimistic locking
-* Transaction support
-* Health checker for Kubernetes
-* Object mapping
-* Works with `sql-core`
-* Integrates with `export-kit`
+Whether you're building a REST API, microservice, ETL pipeline, or batch processing system, `mssql-core` gives you complete control over your database while keeping your code clean and maintainable.
 
-## Installation
+---
 
-```bash
-npm install mssql-core
-```
+## Why mssql-core?
 
-## Architecture
+Most applications don't need a heavyweight ORM.
 
-```
-Application
-      │
-      ▼
-Repository
-      │
-      ▼
-mssql-core
-      │
-      ▼
-Microsoft SQL Server
-```
+They need a library that is:
 
-For export operations:
+* Fast
+* Predictable
+* Easy to debug
+* Easy to maintain
+* Suitable for enterprise architecture
 
-```
-SQL Server
-      │
-      ▼
-Exporter / ExportService
-      │
-      ▼
-export-kit
-      │
-      ▼
-CSV / Fixed-Length File
-```
+`mssql-core` is designed with these goals in mind.
 
-## Metadata
+## Built for Enterprise Applications
 
-Entity metadata describes how an object maps to a database table.
+`mssql-core` is ideal for:
 
-```ts
-const attributes = {
-    id: {
-        key: true
-    },
-    version: {
-        version: true
-    },
-    name: {},
-    email: {}
-}
-```
+* REST APIs
+* Microservices
+* Batch jobs
+* Import services
+* Export services
+* ETL pipelines
+* Back-office systems
+* Financial applications
+* Healthcare systems
+* Government applications
 
-The same metadata is reused for:
+---
+
+# Features
+
+## Metadata-Driven SQL
+
+Define your entity metadata once.
+
+Reuse it everywhere.
 
 * SQL generation
 * Object mapping
 * Insert
 * Update
 * Save
+* Batch processing
 * Export
 
-## Writing Data
+No duplicated mapping configuration.
 
-### Save
+---
 
-`SQLWriter` automatically determines whether each object should be inserted or updated.
+## Smart Save
+
+Most libraries force developers to choose between insert and update.
+
+```text
+Insert?
+
+or
+
+Update?
+```
+
+`mssql-core` introduces **Save**.
+
+Simply write:
 
 ```ts
 await writer.write(user)
 ```
 
-The decision is based on the entity metadata.
+The library automatically determines whether the entity should be inserted or updated based on its metadata.
 
-You don't need to call separate insert or update methods.
+No duplicated business logic.
 
-### Batch Save
+---
 
-Write an entire collection efficiently.
+## Batch Processing
+
+Process thousands of records efficiently.
 
 ```ts
-await writer.write(users)
+await batchWriter.write(users)
 ```
 
-`SQLBatchWriter` builds SQL for the entire collection and executes it using batch operations.
+Designed for:
 
-### Streaming Save
+* Data migration
+* ETL
+* Synchronization
+* Scheduled jobs
 
-For very large imports, `SQLStreamWriter` processes one object at a time without loading the entire dataset into memory.
+---
 
-Typical use cases include:
+## Streaming Processing
 
-* CSV import
-* Excel import
-* ETL pipelines
-* Message consumers
+Need to process millions of records?
 
-## Exporting Data
+`SQLStreamWriter` processes data one object at a time.
 
-`mssql-core` supports streaming export directly from SQL Server.
+Benefits:
+
+* Low memory usage
+* High throughput
+* Suitable for very large datasets
+
+Perfect for:
+
+* CSV imports
+* Excel imports
+* Queue consumers
+* Message processing
+
+---
+
+## Streaming Export
+
+Export large SQL Server tables without loading everything into memory.
 
 Two APIs are available.
 
 ### Exporter
 
-A functional API designed for JavaScript, TypeScript and Go developers.
+A functional API for JavaScript, TypeScript, and Go developers.
 
 ### ExportService
 
-An interface-based API designed for developers who prefer object-oriented programming and dependency injection.
+An interface-based API for developers who prefer object-oriented programming and dependency injection.
 
-Both APIs stream rows directly from SQL Server.
+Both APIs stream rows directly from SQL Server for maximum performance.
 
-## Integration with export-kit
+---
 
-`mssql-core` works seamlessly with `export-kit`.
+## Works with export-kit
 
-```
+`mssql-core` integrates seamlessly with **export-kit**.
+
+```text
 SQL Server
       │
       ▼
@@ -148,75 +160,150 @@ Formatter<T>
 FileWriter
       │
       ▼
-CSV / Fixed-Length File
+CSV
+Fixed-Length File
 ```
 
-`export-kit` provides:
+`export-kit` handles file generation while `mssql-core` focuses on efficient database access.
 
-* `Formatter<T>` for converting objects into text records
-* `FileWriter` for writing CSV and fixed-length files
+This separation keeps your application modular and reusable.
 
-This separation keeps SQL access independent from file generation.
+---
 
 ## Optimistic Locking
 
-Entities may define a version field.
+Protect your data from concurrent updates.
 
-```ts
-version: {
-    version: true
-}
-```
+Simply define a version field in your metadata.
 
-The generated update statements automatically include version checking.
+The generated SQL automatically performs optimistic locking.
 
-## Transactions
+No additional business logic required.
 
-All writers can execute using an existing transaction.
+---
 
-```ts
-await transaction.begin()
+## Transaction Support
 
-...
+Execute multiple operations safely within a transaction.
 
-await transaction.commit()
-```
+Perfect for business workflows that require consistency.
+
+---
 
 ## Health Check
 
-`SQLChecker` verifies database connectivity.
+Monitor SQL Server availability.
 
-Typical usage includes:
+Designed for:
 
 * Kubernetes readiness probes
 * Kubernetes liveness probes
-* Monitoring
-* Startup validation
+* Cloud-native deployments
+* Production monitoring
 
-## Object Mapping
+---
 
-Rows returned from SQL Server are automatically mapped into strongly typed objects using the configured metadata.
+## Lightweight
 
-## Why mssql-core?
+`mssql-core` is not an ORM.
 
-Unlike traditional ORMs, `mssql-core` focuses on:
+It doesn't generate proxies.
 
-* Explicit SQL
-* High performance
-* Streaming
-* Low memory usage
-* Metadata reuse
-* Enterprise architecture
-* Strong typing
+It doesn't track entities.
 
-It provides reusable building blocks instead of a heavyweight persistence framework.
+It doesn't require decorators.
 
-## Related Libraries
+It simply provides reusable building blocks for modern applications.
+
+---
+
+# Architecture
+
+```text
+Application
+        │
+        ▼
+Repository
+        │
+        ▼
+mssql-core
+        │
+        ▼
+SQL Server
+```
+
+For exporting data:
+
+```text
+SQL Server
+        │
+        ▼
+Exporter / ExportService
+        │
+        ▼
+export-kit
+        │
+        ▼
+CSV / Fixed-Length File
+```
+
+Each library has a single responsibility.
+
+---
+
+# Designed Around Reusable Components
+
+The library is built from composable building blocks.
+
+* SQL generation
+* Save operations
+* Batch processing
+* Streaming processing
+* Exporting
+* Transactions
+* Health checking
+* Object mapping
+
+Use only the components your application needs.
+
+---
+
+# Why Developers Choose mssql-core
+
+✅ Explicit SQL
+
+✅ High performance
+
+✅ Streaming support
+
+✅ Batch processing
+
+✅ Smart save
+
+✅ Optimistic locking
+
+✅ Metadata reuse
+
+✅ Enterprise architecture
+
+✅ Low memory usage
+
+✅ Strong TypeScript support
+
+---
+
+# Related Libraries
+
+The library is part of the **core-ts** ecosystem.
 
 * **sql-core** — SQL generation and repository utilities
 * **export-kit** — Streaming file export framework
 * **query-mappers** — Object mapping utilities
 
-## License
+Together, these libraries help you build scalable, maintainable enterprise applications.
+
+---
+
+# License
 
 MIT
