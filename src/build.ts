@@ -1,312 +1,312 @@
-import { Attribute, Attributes, Statement, StringMap } from './metadata';
+import { Attribute, Attributes, Statement, StringMap } from "./metadata"
 
 // tslint:disable-next-line:class-name
 export class resource {
-  static string?: boolean;
-  static ignoreDatetime?: boolean;
+  static string?: boolean
+  static ignoreDatetime?: boolean
 }
 export function param(i: number): string {
-  return '@' + i;
+  return "@" + i
 }
 export function params(length: number, from?: number): string[] {
   if (from == null) {
-    from = 0;
+    from = 0
   }
-  const ps: string[] = [];
+  const ps: string[] = []
   for (let i = 1; i <= length; i++) {
-    ps.push(param(i + from));
+    ps.push(param(i + from))
   }
-  return ps;
+  return ps
 }
 export interface Metadata {
-  keys: Attribute[];
-  bools?: Attribute[];
-  map?: StringMap;
-  version?: string;
-  fields?: string[];
+  keys: Attribute[]
+  bools?: Attribute[]
+  map?: StringMap
+  version?: string
+  fields?: string[]
 }
 export function metadata(attrs: Attributes): Metadata {
-  const mp: StringMap = {};
-  const ks = Object.keys(attrs as any);
-  const ats: Attribute[] = [];
-  const bools: Attribute[] = [];
-  const fields: string[] = [];
-  const m: Metadata = { keys: ats, fields };
-  let isMap = false;
+  const mp: StringMap = {}
+  const ks = Object.keys(attrs as any)
+  const ats: Attribute[] = []
+  const bools: Attribute[] = []
+  const fields: string[] = []
+  const m: Metadata = { keys: ats, fields }
+  let isMap = false
   for (const k of ks) {
-    const attr = attrs[k];
-    attr.name = k;
+    const attr = attrs[k]
+    attr.name = k
     if (attr.key) {
-      ats.push(attr);
+      ats.push(attr)
     }
     if (!attr.ignored) {
-      fields.push(k);
+      fields.push(k)
     }
-    if (attr.type === 'boolean') {
-      bools.push(attr);
+    if (attr.type === "boolean") {
+      bools.push(attr)
     }
     if (attr.version) {
-      m.version = k;
+      m.version = k
     }
-    const field = attr.column ? attr.column : k;
-    const s = field.toLowerCase();
+    const field = attr.column ? attr.column : k
+    const s = field.toLowerCase()
     if (s !== k) {
-      mp[s] = k;
-      isMap = true;
+      mp[s] = k
+      isMap = true
     }
   }
 
   if (isMap) {
-    m.map = mp;
+    m.map = mp
   }
   if (bools.length > 0) {
-    m.bools = bools;
+    m.bools = bools
   }
-  return m;
+  return m
 }
 export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, pks?: Attribute[], i?: number): Statement | undefined {
   if (!i) {
-    i = 1;
+    i = 1
   }
   if (!buildParam) {
-    buildParam = param;
+    buildParam = param
   }
-  const cols: string[] = [];
-  const values: string[] = [];
-  const args: any[] = [];
-  let isVersion = false;
-  const ks = Object.keys(attrs as any);
+  const cols: string[] = []
+  const values: string[] = []
+  const args: any[] = []
+  let isVersion = false
+  const ks = Object.keys(attrs as any)
   if (!pks) {
-    pks = [];
+    pks = []
     for (const k of ks) {
-      const attr = attrs[k];
-      attr.name = k;
+      const attr = attrs[k]
+      attr.name = k
       if (attr.key) {
-        pks.push(attr);
+        pks.push(attr)
       }
     }
   }
-  const colQuery0: string[] = [];
-  const colQuery: string[] = [];
-  const colSet: string[] = [];
-  let noUpdate = false;
-  const o: any = obj;
+  const colQuery0: string[] = []
+  const colQuery: string[] = []
+  const colSet: string[] = []
+  let noUpdate = false
+  const o: any = obj
   if (pks.length > 0) {
     for (const pk of pks) {
       if (pk.name) {
-        const v = o[pk.name];
+        const v = o[pk.name]
         if (!v) {
-          return undefined;
+          return undefined
         } else {
-          const attr = attrs[pk.name];
-          const field = attr.column ? attr.column : pk.name;
-          let x: string;
+          const attr = attrs[pk.name]
+          const field = attr.column ? attr.column : pk.name
+          let x: string
           if (v === null) {
-            x = 'null';
-            noUpdate = true;
-          } else if (v === '') {
-            x = `''`;
-          } else if (typeof v === 'number') {
-            x = toString(v);
+            x = "null"
+            noUpdate = true
+          } else if (v === "") {
+            x = `''`
+          } else if (typeof v === "number") {
+            x = toString(v)
           } else {
-            x = buildParam(i++);
-            if (typeof v === 'boolean') {
+            x = buildParam(i++)
+            if (typeof v === "boolean") {
               if (v === true) {
-                const v2 = attr.true ? '' + attr.true : `'1'`;
-                args.push(v2);
+                const v2 = attr.true ? "" + attr.true : `'1'`
+                args.push(v2)
               } else {
-                const v2 = attr.false ? '' + attr.false : `'0'`;
-                args.push(v2);
+                const v2 = attr.false ? "" + attr.false : `'0'`
+                args.push(v2)
               }
             } else {
-              args.push(v);
+              args.push(v)
             }
           }
-          colQuery0.push(`${field}=${x}`);
+          colQuery0.push(`${field}=${x}`)
         }
       }
     }
     for (const k of ks) {
-      const v = o[k];
+      const v = o[k]
       if (v !== undefined) {
-        const attr = attrs[k];
+        const attr = attrs[k]
         if (!attr.key && !attr.ignored && k !== ver && !attr.noupdate) {
-          const field = attr.column ? attr.column : k;
-          let x: string;
+          const field = attr.column ? attr.column : k
+          let x: string
           if (v === null) {
-            x = 'null';
-          } else if (v === '') {
-            x = `''`;
-          } else if (typeof v === 'number') {
-            x = toString(v);
-          } else if (typeof v === 'boolean') {
+            x = "null"
+          } else if (v === "") {
+            x = `''`
+          } else if (typeof v === "number") {
+            x = toString(v)
+          } else if (typeof v === "boolean") {
             if (attr.true === undefined) {
               if (v === true) {
-                x = `'1'`;
+                x = `'1'`
               } else {
-                x = `'0'`;
+                x = `'0'`
               }
             } else {
-              x = buildParam(i++);
+              x = buildParam(i++)
               if (v === true) {
-                const v2 = attr.true ? attr.true : `'1'`;
-                args.push(v2);
+                const v2 = attr.true ? attr.true : `'1'`
+                args.push(v2)
               } else {
-                const v2 = attr.false ? attr.false : `'0'`;
-                args.push(v2);
+                const v2 = attr.false ? attr.false : `'0'`
+                args.push(v2)
               }
             }
           } else {
-            if (resource.ignoreDatetime && typeof v === 'string' && attr.type === 'datetime') {
-              x = `'${v}'`;
+            if (resource.ignoreDatetime && typeof v === "string" && attr.type === "datetime") {
+              x = `'${v}'`
             } else {
-              x = buildParam(i++);
-              args.push(v);
+              x = buildParam(i++)
+              args.push(v)
             }
           }
-          colSet.push(`${field}=${x}`);
+          colSet.push(`${field}=${x}`)
         }
       }
     }
     for (const pk of pks) {
       if (pk.name) {
-        const v = o[pk.name];
+        const v = o[pk.name]
         if (!v) {
-          noUpdate = true;
-          break;
+          noUpdate = true
+          break
         } else {
-          const attr = attrs[pk.name];
-          const field = attr.column ? attr.column : pk.name;
-          let x: string;
+          const attr = attrs[pk.name]
+          const field = attr.column ? attr.column : pk.name
+          let x: string
           if (v === null) {
-            x = 'null';
-          } else if (v === '') {
-            x = `''`;
-          } else if (typeof v === 'number') {
-            x = toString(v);
+            x = "null"
+          } else if (v === "") {
+            x = `''`
+          } else if (typeof v === "number") {
+            x = toString(v)
           } else {
-            x = buildParam(i++);
-            if (typeof v === 'boolean') {
+            x = buildParam(i++)
+            if (typeof v === "boolean") {
               if (v === true) {
-                const v2 = attr.true ? '' + attr.true : `'1'`;
-                args.push(v2);
+                const v2 = attr.true ? "" + attr.true : `'1'`
+                args.push(v2)
               } else {
-                const v2 = attr.false ? '' + attr.false : `'0'`;
-                args.push(v2);
+                const v2 = attr.false ? "" + attr.false : `'0'`
+                args.push(v2)
               }
             } else {
-              args.push(v);
+              args.push(v)
             }
           }
-          colQuery.push(`${field}=${x}`);
+          colQuery.push(`${field}=${x}`)
         }
       }
     }
   }
   for (const k of ks) {
-    const attr = attrs[k];
-    let v = o[k];
+    const attr = attrs[k]
+    let v = o[k]
     if (v == null) {
-      v = attr.default;
+      v = attr.default
     }
     if (v != null && !attr.ignored && !attr.noinsert) {
-      const field = attr.column ? attr.column : k;
-      cols.push(field);
+      const field = attr.column ? attr.column : k
+      cols.push(field)
       if (k === ver) {
-        isVersion = true;
-        values.push(`${1}`);
+        isVersion = true
+        values.push(`${1}`)
       } else {
-        if (v === '') {
-          values.push(`''`);
-        } else if (typeof v === 'number') {
-          values.push(toString(v));
-        } else if (typeof v === 'boolean') {
+        if (v === "") {
+          values.push(`''`)
+        } else if (typeof v === "number") {
+          values.push(toString(v))
+        } else if (typeof v === "boolean") {
           if (attr.true === undefined) {
             if (v === true) {
-              values.push(`true`);
+              values.push(`true`)
             } else {
-              values.push(`false`);
+              values.push(`false`)
             }
           } else {
-            const p = buildParam(i++);
-            values.push(p);
+            const p = buildParam(i++)
+            values.push(p)
             if (v === true) {
-              const v2 = attr.true ? attr.true : `'1'`;
-              args.push(v2);
+              const v2 = attr.true ? attr.true : `'1'`
+              args.push(v2)
             } else {
-              const v2 = attr.false ? attr.false : `'0'`;
-              args.push(v2);
+              const v2 = attr.false ? attr.false : `'0'`
+              args.push(v2)
             }
           }
         } else {
-          if (resource.ignoreDatetime && typeof v === 'string' && attr.type === 'datetime') {
-            values.push(`'${v}'`);
+          if (resource.ignoreDatetime && typeof v === "string" && attr.type === "datetime") {
+            values.push(`'${v}'`)
           } else {
-            const p = buildParam(i++);
-            values.push(p);
-            args.push(v);
+            const p = buildParam(i++)
+            values.push(p)
+            args.push(v)
           }
         }
       }
     }
   }
   if (pks.length === 0 && cols.length === 0) {
-    return undefined;
+    return undefined
   }
   if (!isVersion && ver && ver.length > 0) {
-    const attr = attrs[ver];
-    const field = attr.column ? attr.column : ver;
-    cols.push(field);
-    values.push(`${1}`);
+    const attr = attrs[ver]
+    const field = attr.column ? attr.column : ver
+    cols.push(field)
+    values.push(`${1}`)
   }
   if (noUpdate || pks.length === 0 || colSet.length === 0) {
-    const q = `insert into ${table}(${cols.join(',')})values(${values.join(',')})`;
-    return { query: q, params: args };
+    const q = `insert into ${table}(${cols.join(",")})values(${values.join(",")})`
+    return { query: q, params: args }
   } else {
     if (ver && ver.length > 0) {
-      const v = o[ver];
-      if (typeof v === 'number' && !isNaN(v)) {
-        const attr = attrs[ver];
+      const v = o[ver]
+      if (typeof v === "number" && !isNaN(v)) {
+        const attr = attrs[ver]
         if (attr) {
-          const field = attr.column ? attr.column : ver;
-          colSet.push(`${field}=${1 + v}`);
-          colQuery.push(`${field}=${v}`);
+          const field = attr.column ? attr.column : ver
+          colSet.push(`${field}=${1 + v}`)
+          colQuery.push(`${field}=${v}`)
         }
       }
     }
-    const field1 = pks[0].column ? pks[0].column : pks[0].name;
-    const query = `if exists (select ${field1} from ${table} where ${colQuery0.join(' and ')})
- update ${table} set ${colSet.join(',')} where ${colQuery.join(' and ')}
+    const field1 = pks[0].column ? pks[0].column : pks[0].name
+    const query = `if exists (select ${field1} from ${table} where ${colQuery0.join(" and ")})
+ update ${table} set ${colSet.join(",")} where ${colQuery.join(" and ")}
 else
- insert into ${table}(${cols.join(',')})values(${values.join(',')})`;
-    return { query, params: args };
+ insert into ${table}(${cols.join(",")})values(${values.join(",")})`
+    return { query, params: args }
   }
 }
 export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string): Statement[] {
   if (!buildParam) {
-    buildParam = param;
+    buildParam = param
   }
-  const sts: Statement[] = [];
-  const ks = Object.keys(attrs as any);
-  const pks: Attribute[] = [];
+  const sts: Statement[] = []
+  const ks = Object.keys(attrs as any)
+  const pks: Attribute[] = []
   for (const k of ks) {
-    const attr = attrs[k];
-    attr.name = k;
+    const attr = attrs[k]
+    attr.name = k
     if (attr.key) {
-      pks.push(attr);
+      pks.push(attr)
     }
   }
   for (const obj of objs) {
-    const smt = buildToSave(obj, table, attrs, ver, buildParam, pks);
+    const smt = buildToSave(obj, table, attrs, ver, buildParam, pks)
     if (smt) {
-      sts.push(smt);
+      sts.push(smt)
     }
   }
-  return sts;
+  return sts
 }
 export function toString(v: number): string {
   if (v === v && v !== Infinity && v !== -Infinity) {
-    return '' + v;
+    return "" + v
   }
-  return 'null';
+  return "null"
 }

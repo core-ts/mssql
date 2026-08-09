@@ -1,259 +1,259 @@
-import { ConnectionPool, Request, Transaction } from 'mssql';
-import { buildToSave, buildToSaveBatch, resource } from './build';
-import { Attribute, Attributes, DB, Statement, StringMap, Tx } from './metadata';
+import { ConnectionPool, Request, Transaction } from "mssql"
+import { buildToSave, buildToSaveBatch, resource } from "./build"
+import { Attribute, Attributes, DB, Statement, StringMap, Tx } from "./metadata"
 
-export * from './build';
-export * from './metadata';
+export * from "./build"
+export * from "./metadata"
 
 // tslint:disable-next-line:max-classes-per-file
 export class PoolManager implements DB {
   constructor(protected pool: ConnectionPool) {
-    this.param = this.param.bind(this);
-    this.execute = this.execute.bind(this);
-    this.executeBatch = this.executeBatch.bind(this);
-    this.query = this.query.bind(this);
-    this.queryOne = this.queryOne.bind(this);
-    this.executeScalar = this.executeScalar.bind(this);
-    this.count = this.count.bind(this);
+    this.param = this.param.bind(this)
+    this.execute = this.execute.bind(this)
+    this.executeBatch = this.executeBatch.bind(this)
+    this.query = this.query.bind(this)
+    this.queryOne = this.queryOne.bind(this)
+    this.executeScalar = this.executeScalar.bind(this)
+    this.count = this.count.bind(this)
   }
   beginTransaction(): Promise<Tx> {
-    const transaction = new Transaction(this.pool);
-    const tx = new SqlTransaction(transaction);
-    return Promise.resolve(tx);
+    const transaction = new Transaction(this.pool)
+    const tx = new SqlTransaction(transaction)
+    return Promise.resolve(tx)
   }
-  driver = 'mssql';
+  driver = "mssql"
   param(i: number): string {
-    return '@' + i;
+    return "@" + i
   }
   execute(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.pool;
-    return execute(p, q, args);
+    const p = ctx ? ctx : this.pool
+    return execute(p, q, args)
   }
   executeBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.pool;
-    return executeBatch(p, statements, firstSuccess);
+    const p = ctx ? ctx : this.pool
+    return executeBatch(p, statements, firstSuccess)
   }
   query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
-    const p = ctx ? ctx : this.pool;
-    return query(p, q, args, m, fields);
+    const p = ctx ? ctx : this.pool
+    return query(p, q, args, m, fields)
   }
   queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T | null> {
-    const p = ctx ? ctx : this.pool;
-    return queryOne(p, q, args, m, fields);
+    const p = ctx ? ctx : this.pool
+    return queryOne(p, q, args, m, fields)
   }
   executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T> {
-    const p = ctx ? ctx : this.pool;
-    return executeScalar<T>(p, q, args);
+    const p = ctx ? ctx : this.pool
+    return executeScalar<T>(p, q, args)
   }
   count(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.pool;
-    return count(p, q, args);
+    const p = ctx ? ctx : this.pool
+    return count(p, q, args)
   }
 }
 export class SqlTransaction implements Tx {
   constructor(protected tx: Transaction) {
-    this.param = this.param.bind(this);
-    this.execute = this.execute.bind(this);
-    this.executeBatch = this.executeBatch.bind(this);
-    this.query = this.query.bind(this);
-    this.queryOne = this.queryOne.bind(this);
-    this.executeScalar = this.executeScalar.bind(this);
-    this.count = this.count.bind(this);
+    this.param = this.param.bind(this)
+    this.execute = this.execute.bind(this)
+    this.executeBatch = this.executeBatch.bind(this)
+    this.query = this.query.bind(this)
+    this.queryOne = this.queryOne.bind(this)
+    this.executeScalar = this.executeScalar.bind(this)
+    this.count = this.count.bind(this)
   }
   commit(): Promise<void> {
-    return this.tx.commit();
+    return this.tx.commit()
   }
   rollback(): Promise<void> {
-    return this.tx.rollback();
+    return this.tx.rollback()
   }
-  driver = 'mssql';
+  driver = "mssql"
   param(i: number): string {
-    return '@' + i;
+    return "@" + i
   }
   execute(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.tx;
-    return execute(p, q, args);
+    const p = ctx ? ctx : this.tx
+    return execute(p, q, args)
   }
   executeBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.tx;
-    return executeBatch(p, statements, firstSuccess);
+    const p = ctx ? ctx : this.tx
+    return executeBatch(p, statements, firstSuccess)
   }
   query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
-    const p = ctx ? ctx : this.tx;
-    return query(p, q, args, m, fields);
+    const p = ctx ? ctx : this.tx
+    return query(p, q, args, m, fields)
   }
   queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T | null> {
-    const p = ctx ? ctx : this.tx;
-    return queryOne(p, q, args, m, fields);
+    const p = ctx ? ctx : this.tx
+    return queryOne(p, q, args, m, fields)
   }
   executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T> {
-    const p = ctx ? ctx : this.tx;
-    return executeScalar<T>(p, q, args);
+    const p = ctx ? ctx : this.tx
+    return executeScalar<T>(p, q, args)
   }
   count(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.tx;
-    return count(p, q, args);
+    const p = ctx ? ctx : this.tx
+    return count(p, q, args)
   }
 }
 export async function executeBatch(pool: ConnectionPool, statements: Statement[], firstSuccess?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
-    return Promise.resolve(0);
+    return Promise.resolve(0)
   } else if (statements.length === 1) {
-    return execute(pool, statements[0].query, statements[0].params);
+    return execute(pool, statements[0].query, statements[0].params)
   }
-  const transaction = new Transaction(pool);
-  return executeBatchTx(transaction, statements, firstSuccess);
+  const transaction = new Transaction(pool)
+  return executeBatchTx(transaction, statements, firstSuccess)
 }
 export async function executeBatchTx(transaction: Transaction, statements: Statement[], firstSuccess?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
-    return Promise.resolve(0);
+    return Promise.resolve(0)
   } else if (statements.length === 1) {
-    return execute(transaction, statements[0].query, statements[0].params);
+    return execute(transaction, statements[0].query, statements[0].params)
   }
-  let c = 0;
+  let c = 0
   if (firstSuccess) {
     try {
-      const query0 = statements[0];
-      const queries = statements.slice(1);
-      const request = new Request(transaction);
-      await transaction.begin();
-      request.parameters = {};
-      setParameters(request, query0.params);
-      const result1 = await request.query(query0.query);
+      const query0 = statements[0]
+      const queries = statements.slice(1)
+      const request = new Request(transaction)
+      await transaction.begin()
+      request.parameters = {}
+      setParameters(request, query0.params)
+      const result1 = await request.query(query0.query)
       if (result1 && result1.rowsAffected[0] !== 0) {
-        c += result1.rowsAffected[0];
+        c += result1.rowsAffected[0]
         for (const q of queries) {
-          request.parameters = {};
-          setParameters(request, q.params);
-          const result = await request.query(q.query);
-          c += result.rowsAffected[0];
+          request.parameters = {}
+          setParameters(request, q.params)
+          const result = await request.query(q.query)
+          c += result.rowsAffected[0]
         }
       }
-      await transaction.commit();
-      return c;
+      await transaction.commit()
+      return c
     } catch (err) {
-      buildError(err);
-      await transaction.rollback();
-      throw err;
+      buildError(err)
+      await transaction.rollback()
+      throw err
     }
   } else {
     try {
-      const request = new Request(transaction);
-      await transaction.begin();
+      const request = new Request(transaction)
+      await transaction.begin()
       for (const item of statements) {
-        request.parameters = {};
-        setParameters(request, item.params);
-        const result = await request.query(item.query);
-        c += result.rowsAffected[0];
+        request.parameters = {}
+        setParameters(request, item.params)
+        const result = await request.query(item.query)
+        c += result.rowsAffected[0]
       }
-      await transaction.commit();
-      return c;
+      await transaction.commit()
+      return c
     } catch (err) {
-      await transaction.rollback();
-      throw err;
+      await transaction.rollback()
+      throw err
     }
   }
 }
 function buildError(err: any): any {
   if (err.originalError && err.originalError.info) {
-    const info = err.originalError.info;
-    const m = info.message;
-    if (m && typeof m === 'string' && m.startsWith('Violation of PRIMARY KEY constraint')) {
-      err.error = 'duplicate';
+    const info = err.originalError.info
+    const m = info.message
+    if (m && typeof m === "string" && m.startsWith("Violation of PRIMARY KEY constraint")) {
+      err.error = "duplicate"
     }
   }
-  return err;
+  return err
 }
 export function execute(db: ConnectionPool | Transaction, q: string, args?: any[]): Promise<number> {
-  const request = db.request();
-  setParameters(request, args);
+  const request = db.request()
+  setParameters(request, args)
   return request
     .query(q)
     .then((results: { rowsAffected: any[] }) => results.rowsAffected[0])
     .catch((err: any) => {
-      buildError(err);
-      throw err;
-    });
+      buildError(err)
+      throw err
+    })
 }
 export function query<T>(db: ConnectionPool | Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T[]> {
-  const request = db.request();
-  setParameters(request, args);
+  const request = db.request()
+  setParameters(request, args)
   return request.query<T>(q).then((results) => {
-    return handleResults<T>(results.recordset, m, bools);
-  });
+    return handleResults<T>(results.recordset, m, bools)
+  })
 }
 
 export function queryOne<T>(db: ConnectionPool | Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
   return query<T[]>(db, q, args, m, bools)
     .then((results) => {
       if (results && results.length > 0) {
-        return results[0] as any;
+        return results[0] as any
       } else {
-        return null;
+        return null
       }
     })
     .catch((err) => {
-      throw err;
-    });
+      throw err
+    })
 }
 export function executeScalar<T>(db: ConnectionPool | Transaction, q: string, args?: any[]): Promise<T> {
   return queryOne<T>(db, q, args).then((r) => {
     if (!r) {
-      return null;
+      return null
     } else {
-      const keys = Object.keys(r as any);
-      return (r as any)[keys[0]];
+      const keys = Object.keys(r as any)
+      return (r as any)[keys[0]]
     }
-  });
+  })
 }
 export function count(db: ConnectionPool, q: string, args?: any[]): Promise<number> {
-  return executeScalar<number>(db, q, args);
+  return executeScalar<number>(db, q, args)
 }
 export function save<T>(db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
-  const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i);
+  const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i)
   if (!stm) {
-    return Promise.resolve(0);
+    return Promise.resolve(0)
   } else {
-    if (typeof db === 'function') {
-      return db(stm.query, stm.params);
+    if (typeof db === "function") {
+      return db(stm.query, stm.params)
     } else {
-      return execute(db, stm.query, stm.params);
+      return execute(db, stm.query, stm.params)
     }
   }
 }
 export function saveBatch<T>(db: ConnectionPool | ((statements: Statement[]) => Promise<number>), objs: T[], table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string): Promise<number> {
-  const stmts = buildToSaveBatch(objs, table, attrs, ver, buildParam);
+  const stmts = buildToSaveBatch(objs, table, attrs, ver, buildParam)
   if (!stmts || stmts.length === 0) {
-    return Promise.resolve(0);
+    return Promise.resolve(0)
   } else {
-    if (typeof db === 'function') {
-      return db(stmts);
+    if (typeof db === "function") {
+      return db(stmts)
     } else {
-      return executeBatch(db, stmts);
+      return executeBatch(db, stmts)
     }
   }
 }
 export function setParameters(request: Request, args?: any[]): void {
   if (args && args.length > 0) {
-    const l = args.length;
+    const l = args.length
     for (let i = 0; i < l; i++) {
-      const j = i + 1;
+      const j = i + 1
       if (args[i] === undefined || args[i] == null) {
-        request.input(`${j}`, null);
+        request.input(`${j}`, null)
       } else {
-        if (typeof args[i] === 'object') {
+        if (typeof args[i] === "object") {
           if (args[i] instanceof Date) {
-            request.input(`${j}`, args[i]);
+            request.input(`${j}`, args[i])
           } else {
             if (resource.string) {
-              const s: string = JSON.stringify(args[i]);
-              request.input(`${j}`, s);
+              const s: string = JSON.stringify(args[i])
+              request.input(`${j}`, s)
             } else {
-              request.input(`${j}`, args[i]);
+              request.input(`${j}`, args[i])
             }
           }
         } else {
-          request.input(`${j}`, args[i]);
+          request.input(`${j}`, args[i])
         }
       }
     }
@@ -261,185 +261,185 @@ export function setParameters(request: Request, args?: any[]): void {
 }
 export function toArray(arr: any[]): any[] {
   if (!arr || arr.length === 0) {
-    return [];
+    return []
   }
-  const p: any[] = [];
-  const l = arr.length;
+  const p: any[] = []
+  const l = arr.length
   for (let i = 0; i < l; i++) {
     if (arr[i] === undefined || arr[i] == null) {
-      p.push(null);
+      p.push(null)
     } else {
-      if (typeof arr[i] === 'object') {
+      if (typeof arr[i] === "object") {
         if (arr[i] instanceof Date) {
-          p.push(arr[i]);
+          p.push(arr[i])
         } else {
           if (resource.string) {
-            const s: string = JSON.stringify(arr[i]);
-            p.push(s);
+            const s: string = JSON.stringify(arr[i])
+            p.push(s)
           } else {
-            p.push(arr[i]);
+            p.push(arr[i])
           }
         }
       } else {
-        p.push(arr[i]);
+        p.push(arr[i])
       }
     }
   }
-  return p;
+  return p
 }
 export function handleResult<T>(r: T, m?: StringMap, bools?: Attribute[]): T {
   if (r == null || r === undefined || (!m && (!bools || bools.length === 0))) {
-    return r;
+    return r
   }
-  handleResults([r], m, bools);
-  return r;
+  handleResults([r], m, bools)
+  return r
 }
 export function handleResults<T>(r: T[], m?: StringMap, bools?: Attribute[]): T[] {
   if (m) {
-    const res = mapArray(r, m);
+    const res = mapArray(r, m)
     if (bools && bools.length > 0) {
-      return handleBool(res, bools);
+      return handleBool(res, bools)
     } else {
-      return res;
+      return res
     }
   } else {
     if (bools && bools.length > 0) {
-      return handleBool(r, bools);
+      return handleBool(r, bools)
     } else {
-      return r;
+      return r
     }
   }
 }
 export function handleBool<T>(objs: T[], bools: Attribute[]): T[] {
   if (!bools || bools.length === 0 || !objs) {
-    return objs;
+    return objs
   }
   for (const obj of objs) {
-    const o: any = obj;
+    const o: any = obj
     for (const field of bools) {
       if (field.name) {
-        const v = o[field.name];
-        if (typeof v !== 'boolean' && v != null && v !== undefined) {
-          const b = field.true;
+        const v = o[field.name]
+        if (typeof v !== "boolean" && v != null && v !== undefined) {
+          const b = field.true
           if (b == null || b === undefined) {
             // tslint:disable-next-line:triple-equals
-            o[field.name] = '1' == v || 'T' == v || 'Y' == v || 'ON' == v;
+            o[field.name] = "1" == v || "T" == v || "Y" == v || "ON" == v
           } else {
             // tslint:disable-next-line:triple-equals
-            o[field.name] = v == b ? true : false;
+            o[field.name] = v == b ? true : false
           }
         }
       }
     }
   }
-  return objs;
+  return objs
 }
 export function map<T>(obj: T, m?: StringMap): any {
   if (!m) {
-    return obj;
+    return obj
   }
-  const mkeys = Object.keys(m as any);
+  const mkeys = Object.keys(m as any)
   if (mkeys.length === 0) {
-    return obj;
+    return obj
   }
-  const o: any = {};
-  const keys = Object.keys(obj as any);
+  const o: any = {}
+  const keys = Object.keys(obj as any)
   for (const key of keys) {
-    let k0 = m[key];
+    let k0 = m[key]
     if (!k0) {
-      k0 = key;
+      k0 = key
     }
-    o[k0] = (obj as any)[key];
+    o[k0] = (obj as any)[key]
   }
-  return o;
+  return o
 }
 export function mapArray<T>(results: T[], m?: StringMap): T[] {
   if (!m) {
-    return results;
+    return results
   }
-  const mkeys = Object.keys(m as any);
+  const mkeys = Object.keys(m as any)
   if (mkeys.length === 0) {
-    return results;
+    return results
   }
-  const objs = [];
-  const length = results.length;
+  const objs = []
+  const length = results.length
   for (let i = 0; i < length; i++) {
-    const obj = results[i];
-    const obj2: any = {};
-    const keys = Object.keys(obj as any);
+    const obj = results[i]
+    const obj2: any = {}
+    const keys = Object.keys(obj as any)
     for (const key of keys) {
-      let k0 = m[key];
+      let k0 = m[key]
       if (!k0) {
-        k0 = key;
+        k0 = key
       }
-      obj2[k0] = (obj as any)[key];
+      obj2[k0] = (obj as any)[key]
     }
-    objs.push(obj2);
+    objs.push(obj2)
   }
-  return objs;
+  return objs
 }
 export function getFields(fields: string[], all?: string[]): string[] | undefined {
   if (!fields || fields.length === 0) {
-    return undefined;
+    return undefined
   }
-  const ext: string[] = [];
+  const ext: string[] = []
   if (all) {
     for (const s of fields) {
       if (all.includes(s)) {
-        ext.push(s);
+        ext.push(s)
       }
     }
     if (ext.length === 0) {
-      return undefined;
+      return undefined
     } else {
-      return ext;
+      return ext
     }
   } else {
-    return fields;
+    return fields
   }
 }
 export function buildFields(fields: string[], all?: string[]): string {
-  const s = getFields(fields, all);
+  const s = getFields(fields, all)
   if (!s || s.length === 0) {
-    return '*';
+    return "*"
   } else {
-    return s.join(',');
+    return s.join(",")
   }
 }
 export function getMapField(name: string, mp?: StringMap): string {
   if (!mp) {
-    return name;
+    return name
   }
-  const x = mp[name];
+  const x = mp[name]
   if (!x) {
-    return name;
+    return name
   }
-  if (typeof x === 'string') {
-    return x;
+  if (typeof x === "string") {
+    return x
   }
-  return name;
+  return name
 }
 export function isEmpty(s: string): boolean {
-  return !(s && s.length > 0);
+  return !(s && s.length > 0)
 }
 export function version(attrs: Attributes): Attribute | undefined {
-  const ks = Object.keys(attrs as any);
+  const ks = Object.keys(attrs as any)
   for (const k of ks) {
-    const attr = attrs[k];
+    const attr = attrs[k]
     if (attr.version) {
-      attr.name = k;
-      return attr;
+      attr.name = k
+      return attr
     }
   }
-  return undefined;
+  return undefined
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLWriter<T> {
-  db?: ConnectionPool;
-  exec?: (sql: string, args?: any[]) => Promise<number>;
-  map?: (v: T) => T;
-  param?: (i: number) => string;
-  version?: string;
+  db?: ConnectionPool
+  exec?: (sql: string, args?: any[]) => Promise<number>
+  map?: (v: T) => T
+  param?: (i: number) => string
+  version?: string
   constructor(
     db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>),
     public table: string,
@@ -449,60 +449,60 @@ export class SQLWriter<T> {
     buildParam?: (i: number) => string,
     ver?: string,
   ) {
-    this.write = this.write.bind(this);
-    if (typeof db === 'function') {
-      this.exec = db;
+    this.write = this.write.bind(this)
+    if (typeof db === "function") {
+      this.exec = db
     } else {
-      this.db = db;
+      this.db = db
     }
-    this.param = buildParam;
-    this.map = toDB;
+    this.param = buildParam
+    this.map = toDB
     if (ver && ver.length > 0) {
-      this.version = ver;
+      this.version = ver
     } else {
-      const x = version(this.attributes);
+      const x = version(this.attributes)
       if (x) {
-        this.version = x.name;
+        this.version = x.name
       }
     }
   }
   write(obj: T): Promise<number> {
     if (!obj) {
-      return Promise.resolve(0);
+      return Promise.resolve(0)
     }
-    let obj2: NonNullable<T> | T = obj;
+    let obj2: NonNullable<T> | T = obj
     if (this.map) {
-      obj2 = this.map(obj);
+      obj2 = this.map(obj)
     }
-    const stmt = buildToSave(obj2, this.table, this.attributes, this.version, this.param);
+    const stmt = buildToSave(obj2, this.table, this.attributes, this.version, this.param)
     if (stmt) {
       if (this.exec) {
         if (this.oneIfSuccess) {
-          return this.exec(stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0));
+          return this.exec(stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0))
         } else {
-          return this.exec(stmt.query, stmt.params);
+          return this.exec(stmt.query, stmt.params)
         }
       } else {
         if (this.oneIfSuccess) {
-          return execute(this.db as any, stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0));
+          return execute(this.db as any, stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0))
         } else {
-          return execute(this.db as any, stmt.query, stmt.params);
+          return execute(this.db as any, stmt.query, stmt.params)
         }
       }
     } else {
-      return Promise.resolve(0);
+      return Promise.resolve(0)
     }
   }
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLStreamWriter<T> {
-  list: T[] = [];
-  size = 0;
-  pool?: ConnectionPool;
-  version?: string;
-  execBatch?: (statements: Statement[]) => Promise<number>;
-  map?: (v: T) => T;
-  param?: (i: number) => string;
+  list: T[] = []
+  size = 0
+  pool?: ConnectionPool
+  version?: string
+  execBatch?: (statements: Statement[]) => Promise<number>
+  map?: (v: T) => T
+  param?: (i: number) => string
   constructor(
     pool: ConnectionPool | ((statements: Statement[]) => Promise<number>),
     public table: string,
@@ -511,71 +511,71 @@ export class SQLStreamWriter<T> {
     toDB?: (v: T) => T,
     buildParam?: (i: number) => string,
   ) {
-    this.write = this.write.bind(this);
-    this.flush = this.flush.bind(this);
-    if (typeof pool === 'function') {
-      this.execBatch = pool;
+    this.write = this.write.bind(this)
+    this.flush = this.flush.bind(this)
+    if (typeof pool === "function") {
+      this.execBatch = pool
     } else {
-      this.pool = pool;
+      this.pool = pool
     }
-    this.param = buildParam;
-    this.map = toDB;
-    const x = version(attributes);
+    this.param = buildParam
+    this.map = toDB
+    const x = version(attributes)
     if (x) {
-      this.version = x.name;
+      this.version = x.name
     }
     if (size) {
-      this.size = size;
+      this.size = size
     }
   }
   write(obj: T): Promise<number> {
     if (!obj) {
-      return Promise.resolve(0);
+      return Promise.resolve(0)
     }
-    let obj2: NonNullable<T> | T = obj;
+    let obj2: NonNullable<T> | T = obj
     if (this.map) {
-      obj2 = this.map(obj);
-      this.list.push(obj2);
+      obj2 = this.map(obj)
+      this.list.push(obj2)
     } else {
-      this.list.push(obj);
+      this.list.push(obj)
     }
     if (this.list.length < this.size) {
-      return Promise.resolve(0);
+      return Promise.resolve(0)
     } else {
-      return this.flush();
+      return this.flush()
     }
   }
   flush(): Promise<number> {
     if (!this.list || this.list.length === 0) {
-      return Promise.resolve(0);
+      return Promise.resolve(0)
     } else {
-      const total = this.list.length;
-      const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.version, this.param);
+      const total = this.list.length
+      const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.version, this.param)
       if (stmt) {
         if (this.execBatch) {
           return this.execBatch(stmt).then((r) => {
-            this.list = [];
-            return total;
-          });
+            this.list = []
+            return total
+          })
         } else {
           return executeBatch(this.pool as any, stmt).then((r) => {
-            this.list = [];
-            return total;
-          });
+            this.list = []
+            return total
+          })
         }
       } else {
-        return Promise.resolve(0);
+        return Promise.resolve(0)
       }
     }
   }
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLBatchWriter<T> {
-  pool?: ConnectionPool;
-  version?: string;
-  execute?: (statements: Statement[]) => Promise<number>;
-  map?: (v: T) => T;
-  param?: (i: number) => string;
+  pool?: ConnectionPool
+  version?: string
+  execute?: (statements: Statement[]) => Promise<number>
+  map?: (v: T) => T
+  param?: (i: number) => string
   constructor(
     db: ConnectionPool | ((statements: Statement[]) => Promise<number>),
     public table: string,
@@ -585,113 +585,113 @@ export class SQLBatchWriter<T> {
     buildParam?: (i: number) => string,
     ver?: string,
   ) {
-    this.write = this.write.bind(this);
-    if (typeof db === 'function') {
-      this.execute = db;
+    this.write = this.write.bind(this)
+    if (typeof db === "function") {
+      this.execute = db
     } else {
-      this.pool = db;
+      this.pool = db
     }
-    this.param = buildParam;
-    this.map = toDB;
+    this.param = buildParam
+    this.map = toDB
     if (ver && ver.length > 0) {
-      this.version = ver;
+      this.version = ver
     } else {
-      const x = version(this.attributes);
+      const x = version(this.attributes)
       if (x) {
-        this.version = x.name;
+        this.version = x.name
       }
     }
   }
   write(objs: T[]): Promise<number> {
     if (!objs || objs.length === 0) {
-      return Promise.resolve(0);
+      return Promise.resolve(0)
     }
-    let list = objs;
+    let list = objs
     if (this.map) {
-      list = [];
+      list = []
       for (const obj of objs) {
-        const obj2 = this.map(obj);
-        list.push(obj2);
+        const obj2 = this.map(obj)
+        list.push(obj2)
       }
     }
-    const stmts = buildToSaveBatch(list, this.table, this.attributes, this.version, this.param);
+    const stmts = buildToSaveBatch(list, this.table, this.attributes, this.version, this.param)
     if (stmts && stmts.length > 0) {
       if (this.execute) {
         if (this.oneIfSuccess) {
-          return this.execute(stmts).then((ct) => stmts.length);
+          return this.execute(stmts).then((ct) => stmts.length)
         } else {
-          return this.execute(stmts);
+          return this.execute(stmts)
         }
       } else {
         if (this.oneIfSuccess) {
-          return executeBatch(this.pool as any, stmts).then((ct) => stmts.length);
+          return executeBatch(this.pool as any, stmts).then((ct) => stmts.length)
         } else {
-          return executeBatch(this.pool as any, stmts);
+          return executeBatch(this.pool as any, stmts)
         }
       }
     } else {
-      return Promise.resolve(0);
+      return Promise.resolve(0)
     }
   }
 }
 
 export interface AnyMap {
-  [key: string]: any;
+  [key: string]: any
 }
 export interface HealthChecker {
-  name(): string;
-  build(data: AnyMap, error: any): AnyMap;
-  check(): Promise<AnyMap>;
+  name(): string
+  build(data: AnyMap, error: any): AnyMap
+  check(): Promise<AnyMap>
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLChecker implements HealthChecker {
   constructor(
     protected readonly pool: ConnectionPool,
-    protected service: string = 'mssql',
+    protected service: string = "mssql",
     protected readonly timeout = 4500,
   ) {}
 
   name(): string {
-    return this.service;
+    return this.service
   }
 
   build(data: AnyMap, error: any): AnyMap {
     return {
       name: this.name(),
-      status: error ? 'down' : 'up',
+      status: error ? "down" : "up",
       data,
       error,
-    };
+    }
   }
 
   async check(): Promise<AnyMap> {
     try {
-      const start = Date.now();
+      const start = Date.now()
 
-      await Promise.race([this.pool.request().query('SELECT 1'), new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), this.timeout))]);
+      await Promise.race([this.pool.request().query("SELECT 1"), new Promise((_, reject) => setTimeout(() => reject(new Error("Health check timeout")), this.timeout))])
 
       return this.build(
         {
           responseTime: Date.now() - start,
         },
         undefined,
-      );
+      )
     } catch (err) {
-      return this.build({}, err);
+      return this.build({}, err)
     }
   }
 }
 
 export interface QueryBuilder {
-  buildQuery(ctx?: any): Promise<Statement>;
+  buildQuery(ctx?: any): Promise<Statement>
 }
 export interface Formatter<T> {
-  format: (row: T) => string;
+  format: (row: T) => string
 }
 export interface FileWriter {
-  write(chunk: string): boolean;
-  flush?(cb?: () => void): void;
-  end?(cb?: () => void): void;
+  write(chunk: string): boolean
+  flush?(cb?: () => void): void
+  end?(cb?: () => void): void
 }
 // tslint:disable-next-line:max-classes-per-file
 export class Exporter<T> {
@@ -707,60 +707,60 @@ export class Exporter<T> {
     protected progressSize: number = 10000,
   ) {
     if (attributes) {
-      this.map = buildMap(attributes);
+      this.map = buildMap(attributes)
     }
-    this.export = this.export.bind(this);
+    this.export = this.export.bind(this)
   }
-  map?: StringMap;
+  map?: StringMap
   async export(ctx?: any): Promise<number> {
-    const pool = await this.pool.connect();
-    const stmt = await this.buildQuery(ctx);
-    const request = pool.request();
-    request.stream = true;
-    request.query(stmt.query);
-    let i = 0;
-    let j = 0;
-    request.on('row', (row) => {
+    const pool = await this.pool.connect()
+    const stmt = await this.buildQuery(ctx)
+    const request = pool.request()
+    request.stream = true
+    request.query(stmt.query)
+    let i = 0
+    let j = 0
+    request.on("row", (row) => {
       if (this.map) {
-        i++;
-        j++;
-        const obj = mapOne<T>(row, this.map);
-        const str = this.format(obj);
-        this.write(str);
+        i++
+        j++
+        const obj = mapOne<T>(row, this.map)
+        const str = this.format(obj)
+        this.write(str)
         if (j >= this.progressSize) {
           if (this.logInfo) {
-            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`)
           }
-          j = 0;
+          j = 0
         }
       } else {
-        i++;
+        i++
         j++
-        const str = this.format(row);
-        this.write(str);
+        const str = this.format(row)
+        this.write(str)
         if (j >= this.progressSize) {
           if (this.logInfo) {
-            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`)
           }
-          j = 0;
+          j = 0
         }
       }
-    });
-    let er: any;
-    request.on('error', (err) => {
-      er = err;
-      console.log(err);
-    });
+    })
+    let er: any
+    request.on("error", (err) => {
+      er = err
+      console.log(err)
+    })
     return new Promise<number>((resolve, reject) => {
-      request.on('done', (res) => {
-        this.end();
+      request.on("done", (res) => {
+        this.end()
         if (er) {
-          reject(er);
+          reject(er)
         } else {
-          resolve(i);
+          resolve(i)
         }
-      });
-    });
+      })
+    })
   }
 }
 export interface SimpleMap {
@@ -779,200 +779,200 @@ export class ExportService<T> {
     protected progressSize: number = 10000,
   ) {
     if (attributes) {
-      this.map = buildMap(attributes);
+      this.map = buildMap(attributes)
     }
-    this.export = this.export.bind(this);
+    this.export = this.export.bind(this)
   }
-  map?: StringMap;
+  map?: StringMap
   async export(ctx?: any): Promise<number> {
-    const pool = await this.pool.connect();
-    const stmt = await this.queryBuilder.buildQuery(ctx);
-    const request = pool.request();
-    request.stream = true;
-    request.query(stmt.query);
-    let i = 0;
-    let k = 0;
-    request.on('row', (row) => {
+    const pool = await this.pool.connect()
+    const stmt = await this.queryBuilder.buildQuery(ctx)
+    const request = pool.request()
+    request.stream = true
+    request.query(stmt.query)
+    let i = 0
+    let k = 0
+    request.on("row", (row) => {
       if (this.map) {
-        i++;
-        k++;
-        const obj = mapOne<T>(row, this.map);
-        const str = this.formatter.format(obj);
-        this.writer.write(str);
+        i++
+        k++
+        const obj = mapOne<T>(row, this.map)
+        const str = this.formatter.format(obj)
+        this.writer.write(str)
         if (k >= this.progressSize) {
           if (this.logInfo) {
-            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`)
           }
-          k = 0;
+          k = 0
         }
       } else {
-        i++;
-        k++;
-        const str = this.formatter.format(row);
-        this.writer.write(str);
+        i++
+        k++
+        const str = this.formatter.format(row)
+        this.writer.write(str)
         if (k >= this.progressSize) {
           if (this.logInfo) {
-            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`)
           }
-          k = 0;
+          k = 0
         }
       }
-    });
-    let er: any;
-    request.on('error', (err) => {
-      er = err;
-      console.log(err);
-    });
+    })
+    let er: any
+    request.on("error", (err) => {
+      er = err
+      console.log(err)
+    })
     return new Promise<number>((resolve, reject) => {
-      request.on('done', (res) => {
+      request.on("done", (res) => {
         if (this.writer.end) {
-          this.writer.end();
+          this.writer.end()
         } else if (this.writer.flush) {
-          this.writer.flush();
+          this.writer.flush()
         }
         if (er) {
-          reject(er);
+          reject(er)
         } else {
-          resolve(i);
+          resolve(i)
         }
-      });
-    });
+      })
+    })
   }
 }
 export function mapOne<T>(result: any, m?: StringMap): T {
-  const obj: any = result;
+  const obj: any = result
   if (!m) {
-    return obj;
+    return obj
   }
-  const mkeys = Object.keys(m as any);
+  const mkeys = Object.keys(m as any)
   if (mkeys.length === 0) {
-    return obj;
+    return obj
   }
-  const obj2: any = {};
-  const keys = Object.keys(obj);
+  const obj2: any = {}
+  const keys = Object.keys(obj)
   for (const key of keys) {
-    let k0 = m[key];
+    let k0 = m[key]
     if (!k0) {
-      k0 = key;
+      k0 = key
     }
-    obj2[k0] = obj[key];
+    obj2[k0] = obj[key]
   }
-  return obj2;
+  return obj2
 }
 export function buildMap(attrs: Attributes): StringMap | undefined {
-  const mp: StringMap = {};
-  const ks = Object.keys(attrs);
-  let isMap = false;
+  const mp: StringMap = {}
+  const ks = Object.keys(attrs)
+  let isMap = false
   for (const k of ks) {
-    const attr = attrs[k];
-    attr.name = k;
-    const field = attr.column ? attr.column : k;
-    const s = field.toLowerCase();
+    const attr = attrs[k]
+    attr.name = k
+    const field = attr.column ? attr.column : k
+    const s = field.toLowerCase()
     if (s !== k) {
-      mp[s] = k;
-      isMap = true;
+      mp[s] = k
+      isMap = true
     }
   }
   if (isMap) {
-    return mp;
+    return mp
   }
-  return undefined;
+  return undefined
 }
 export function select(table: string, attrs: Attributes): string {
-  const cols: string[] = [];
-  const ks = Object.keys(attrs);
+  const cols: string[] = []
+  const ks = Object.keys(attrs)
   for (const k of ks) {
-    const attr = attrs[k];
-    attr.name = k;
-    const field = attr.column ? attr.column : k;
-    cols.push(field);
+    const attr = attrs[k]
+    attr.name = k
+    const field = attr.column ? attr.column : k
+    cols.push(field)
   }
-  return `select ${cols.join(',')} from ${table}`;
+  return `select ${cols.join(",")} from ${table}`
 }
 export function dateToString(date: Date, separator?: string): string {
-  const year = date.getFullYear().toString();
-  let month: number | string = date.getMonth() + 1;
-  let dt: number | string = date.getDate();
+  const year = date.getFullYear().toString()
+  let month: number | string = date.getMonth() + 1
+  let dt: number | string = date.getDate()
 
   if (dt < 10) {
-    dt = '0' + dt.toString();
+    dt = "0" + dt.toString()
   }
   if (month < 10) {
-    month = '0' + month;
+    month = "0" + month
   }
   if (separator !== undefined) {
-    return year + separator + month + separator + dt;
+    return year + separator + month + separator + dt
   } else {
-    return year + month + dt;
+    return year + month + dt
   }
 }
 export function timeToString(date: Date, separator?: string): string {
-  let hh: number | string = date.getHours();
-  let mm: number | string = date.getMinutes();
-  let ss: number | string = date.getSeconds();
+  let hh: number | string = date.getHours()
+  let mm: number | string = date.getMinutes()
+  let ss: number | string = date.getSeconds()
   if (hh < 10) {
-    hh = '0' + hh.toString();
+    hh = "0" + hh.toString()
   }
   if (ss < 10) {
-    ss = '0' + ss.toString();
+    ss = "0" + ss.toString()
   }
   if (mm < 10) {
-    mm = '0' + mm;
+    mm = "0" + mm
   }
   if (separator !== undefined) {
-    return hh.toString() + separator + mm + separator + ss;
+    return hh.toString() + separator + mm + separator + ss
   } else {
-    return hh.toString() + mm + ss;
+    return hh.toString() + mm + ss
   }
 }
 export function toISOString(d: Date): string {
-  const s = `${dateToString(d, '-')}T${timeToString(d, ':')}.${getMilliseconds(d)}${getTimezone(d)}`;
-  return s;
+  const s = `${dateToString(d, "-")}T${timeToString(d, ":")}.${getMilliseconds(d)}${getTimezone(d)}`
+  return s
 }
 export function getTimezone(d: Date): string {
-  const t = d.getTimezoneOffset() / 60;
-  const p = d.getTimezoneOffset() % 60;
+  const t = d.getTimezoneOffset() / 60
+  const p = d.getTimezoneOffset() % 60
   if (t > 0) {
-    return t > -10 ? '-0' + Math.abs(t) + ':00' : '-' + Math.abs(t) + ':' + getMinutes(p);
+    return t > -10 ? "-0" + Math.abs(t) + ":00" : "-" + Math.abs(t) + ":" + getMinutes(p)
   } else {
-    return t < 9 ? '+0' + Math.abs(t) + ':00' : Math.abs(t).toString() + ':' + getMinutes(p);
+    return t < 9 ? "+0" + Math.abs(t) + ":00" : Math.abs(t).toString() + ":" + getMinutes(p)
   }
 }
 export function getMinutes(p: number): string {
-  const x = Math.abs(p);
-  return x >= 10 ? x.toString() : '0' + x;
+  const x = Math.abs(p)
+  return x >= 10 ? x.toString() : "0" + x
 }
 export function getMilliseconds(d: Date): string {
-  const m = d.getMilliseconds();
+  const m = d.getMilliseconds()
   if (m >= 100) {
-    return m.toString();
+    return m.toString()
   } else if (m >= 10) {
-    return '0' + m;
+    return "0" + m
   } else {
-    return '00' + m;
+    return "00" + m
   }
 }
 export function getFieldsByType(attrs: Attributes, t: string): string[] {
-  const fis: string[] = [];
-  const keys = Object.keys(attrs);
+  const fis: string[] = []
+  const keys = Object.keys(attrs)
   for (const key of keys) {
-    const attr = attrs[key];
+    const attr = attrs[key]
     if (attr.type === t) {
-      fis.push(key);
+      fis.push(key)
     }
   }
-  return fis;
+  return fis
 }
 export function reformatDates(obj: any, ignores: string[], dToString?: (d: Date) => string): any {
-  const toS = dToString ? dToString : toISOString;
-  const keys = Object.keys(obj);
+  const toS = dToString ? dToString : toISOString
+  const keys = Object.keys(obj)
   for (const key of keys) {
-    const v = obj[key];
+    const v = obj[key]
     if (v instanceof Date) {
       if (!ignores.includes(key)) {
-        obj[key] = toS(v);
+        obj[key] = toS(v)
       }
     }
   }
-  return obj;
+  return obj
 }
