@@ -1,6 +1,6 @@
 {
   "name": "mssql-core",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "description": "mssql",
   "main": "./lib/index.js",
   "types": "./src/index.ts",
