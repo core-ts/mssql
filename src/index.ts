@@ -638,55 +638,50 @@ export class SQLBatchWriter<T> {
 export interface AnyMap {
   [key: string]: any;
 }
+export interface HealthChecker {
+  name(): string;
+  build(data: AnyMap, error: any): AnyMap;
+  check(): Promise<AnyMap>;
+}
 // tslint:disable-next-line:max-classes-per-file
-export class SQLChecker {
-  timeout: number;
-  service: string;
+export class SQLChecker implements HealthChecker {
   constructor(
-    private db: ConnectionPool,
-    service?: string,
-    timeout?: number,
-  ) {
-    this.timeout = timeout ? timeout : 4200;
-    this.service = service ? service : 'mssql';
-    this.check = this.check.bind(this);
-    this.name = this.name.bind(this);
-    this.build = this.build.bind(this);
-  }
-  check(): Promise<AnyMap> {
-    const obj = {} as AnyMap;
-    const request = this.db.request();
-    const promise = request.query('select getdate()').then((results) => results.recordset);
-    if (this.timeout > 0) {
-      return promiseTimeOut(this.timeout, promise);
-    } else {
-      return promise;
-    }
-  }
+    protected readonly pool: ConnectionPool,
+    protected service: string = 'mssql',
+    protected readonly timeout = 4500,
+  ) {}
+
   name(): string {
     return this.service;
   }
-  build(data: AnyMap, err: any): AnyMap {
-    if (err) {
-      if (!data) {
-        data = {} as AnyMap;
-      }
-      data['error'] = err;
+
+  build(data: AnyMap, error: any): AnyMap {
+    return {
+      name: this.name(),
+      status: error ? 'down' : 'up',
+      data,
+      error,
+    };
+  }
+
+  async check(): Promise<AnyMap> {
+    try {
+      const start = Date.now();
+
+      await Promise.race([this.pool.request().query('SELECT 1'), new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), this.timeout))]);
+
+      return this.build(
+        {
+          responseTime: Date.now() - start,
+        },
+        undefined,
+      );
+    } catch (err) {
+      return this.build({}, err);
     }
-    return data;
   }
 }
 
-function promiseTimeOut(timeoutInMilliseconds: number, promise: Promise<any>): Promise<any> {
-  return Promise.race([
-    promise,
-    new Promise((resolve, reject) => {
-      setTimeout(() => {
-        reject(`Timed out in: ${timeoutInMilliseconds} milliseconds!`);
-      }, timeoutInMilliseconds);
-    }),
-  ]);
-}
 export interface QueryBuilder {
   buildQuery(ctx?: any): Promise<Statement>;
 }
@@ -701,12 +696,15 @@ export interface FileWriter {
 // tslint:disable-next-line:max-classes-per-file
 export class Exporter<T> {
   constructor(
-    public pool: ConnectionPool,
-    public buildQuery: (ctx?: any) => Promise<Statement>,
-    public format: (row: T) => string,
-    public write: (chunk: string) => boolean,
-    public end: (cb?: () => void) => void,
-    public attributes?: Attributes,
+    protected pool: ConnectionPool,
+    protected filename: string,
+    protected buildQuery: (ctx?: any) => Promise<Statement>,
+    protected format: (row: T) => string,
+    protected write: (chunk: string) => boolean,
+    protected end: (cb?: () => void) => void,
+    protected attributes?: Attributes,
+    protected logInfo?: (msg: string, m?: SimpleMap) => void,
+    protected progressSize: number = 10000,
   ) {
     if (attributes) {
       this.map = buildMap(attributes);
@@ -715,22 +713,37 @@ export class Exporter<T> {
   }
   map?: StringMap;
   async export(ctx?: any): Promise<number> {
-    let i = 0;
     const pool = await this.pool.connect();
     const stmt = await this.buildQuery(ctx);
     const request = pool.request();
     request.stream = true;
     request.query(stmt.query);
+    let i = 0;
+    let j = 0;
     request.on('row', (row) => {
       if (this.map) {
         i++;
+        j++;
         const obj = mapOne<T>(row, this.map);
         const str = this.format(obj);
         this.write(str);
+        if (j >= this.progressSize) {
+          if (this.logInfo) {
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+          }
+          j = 0;
+        }
       } else {
         i++;
+        j++
         const str = this.format(row);
         this.write(str);
+        if (j >= this.progressSize) {
+          if (this.logInfo) {
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+          }
+          j = 0;
+        }
       }
     });
     let er: any;
@@ -750,14 +763,20 @@ export class Exporter<T> {
     });
   }
 }
+export interface SimpleMap {
+  [key: string]: string | number | boolean | Date
+}
 // tslint:disable-next-line:max-classes-per-file
 export class ExportService<T> {
   constructor(
-    public pool: ConnectionPool,
-    public queryBuilder: QueryBuilder,
-    public formatter: Formatter<T>,
-    public writer: FileWriter,
-    public attributes?: Attributes,
+    protected pool: ConnectionPool,
+    protected filename: string,
+    protected queryBuilder: QueryBuilder,
+    protected formatter: Formatter<T>,
+    protected writer: FileWriter,
+    protected attributes?: Attributes,
+    protected logInfo?: (msg: string, m?: SimpleMap) => void,
+    protected progressSize: number = 10000,
   ) {
     if (attributes) {
       this.map = buildMap(attributes);
@@ -766,22 +785,37 @@ export class ExportService<T> {
   }
   map?: StringMap;
   async export(ctx?: any): Promise<number> {
-    let i = 0;
     const pool = await this.pool.connect();
     const stmt = await this.queryBuilder.buildQuery(ctx);
     const request = pool.request();
     request.stream = true;
     request.query(stmt.query);
+    let i = 0;
+    let k = 0;
     request.on('row', (row) => {
       if (this.map) {
         i++;
+        k++;
         const obj = mapOne<T>(row, this.map);
         const str = this.formatter.format(obj);
         this.writer.write(str);
+        if (k >= this.progressSize) {
+          if (this.logInfo) {
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+          }
+          k = 0;
+        }
       } else {
         i++;
+        k++;
         const str = this.formatter.format(row);
         this.writer.write(str);
+        if (k >= this.progressSize) {
+          if (this.logInfo) {
+            this.logInfo(`Progress: ${i} records processed of file '${this.filename}'`);
+          }
+          k = 0;
+        }
       }
     });
     let er: any;
