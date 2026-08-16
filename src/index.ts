@@ -1,5 +1,5 @@
 import { ConnectionPool, Request, Transaction } from "mssql"
-import { buildToSave, buildToSaveBatch, resource } from "./build"
+import { buildToSave, buildToSaveBatch, param, resource } from "./build"
 import { Attribute, Attributes, DB, Statement, StringMap, Tx } from "./metadata"
 
 export * from "./build"
@@ -41,7 +41,7 @@ export class PoolManager implements DB {
     const p = ctx ? ctx : this.pool
     return queryOne(p, q, args, m, fields)
   }
-  executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T> {
+  executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T | null> {
     const p = ctx ? ctx : this.pool
     return executeScalar<T>(p, q, args)
   }
@@ -86,7 +86,7 @@ export class SqlTransaction implements Tx {
     const p = ctx ? ctx : this.tx
     return queryOne(p, q, args, m, fields)
   }
-  executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T> {
+  executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T | null> {
     const p = ctx ? ctx : this.tx
     return executeScalar<T>(p, q, args)
   }
@@ -196,7 +196,7 @@ export function queryOne<T>(db: ConnectionPool | Transaction, q: string, args?: 
       throw err
     })
 }
-export function executeScalar<T>(db: ConnectionPool | Transaction, q: string, args?: any[]): Promise<T> {
+export function executeScalar<T>(db: ConnectionPool | Transaction, q: string, args?: any[]): Promise<T | null> {
   return queryOne<T>(db, q, args).then((r) => {
     if (!r) {
       return null
@@ -207,7 +207,7 @@ export function executeScalar<T>(db: ConnectionPool | Transaction, q: string, ar
   })
 }
 export function count(db: ConnectionPool, q: string, args?: any[]): Promise<number> {
-  return executeScalar<number>(db, q, args)
+  return executeScalar<number>(db, q, args).then((res) => (res !== null ? res : 0))
 }
 export function save<T>(db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
   const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i)
@@ -435,28 +435,19 @@ export function version(attrs: Attributes): Attribute | undefined {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLWriter<T> {
-  db?: ConnectionPool
-  exec?: (sql: string, args?: any[]) => Promise<number>
-  map?: (v: T) => T
   param?: (i: number) => string
   version?: string
   constructor(
-    db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>),
-    public table: string,
-    public attributes: Attributes,
-    public oneIfSuccess?: boolean,
-    toDB?: (v: T) => T,
+    protected pool: ConnectionPool,
+    protected table: string,
+    protected attributes: Attributes,
+    protected oneIfSuccess?: boolean,
+    protected map?: (v: T) => T,
     buildParam?: (i: number) => string,
     ver?: string,
   ) {
     this.write = this.write.bind(this)
-    if (typeof db === "function") {
-      this.exec = db
-    } else {
-      this.db = db
-    }
-    this.param = buildParam
-    this.map = toDB
+    this.param = buildParam ? buildParam : param
     if (ver && ver.length > 0) {
       this.version = ver
     } else {
@@ -476,18 +467,10 @@ export class SQLWriter<T> {
     }
     const stmt = buildToSave(obj2, this.table, this.attributes, this.version, this.param)
     if (stmt) {
-      if (this.exec) {
-        if (this.oneIfSuccess) {
-          return this.exec(stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0))
-        } else {
-          return this.exec(stmt.query, stmt.params)
-        }
+      if (this.oneIfSuccess) {
+        return execute(this.pool, stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0))
       } else {
-        if (this.oneIfSuccess) {
-          return execute(this.db as any, stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0))
-        } else {
-          return execute(this.db as any, stmt.query, stmt.params)
-        }
+        return execute(this.pool, stmt.query, stmt.params)
       }
     } else {
       return Promise.resolve(0)
@@ -497,35 +480,22 @@ export class SQLWriter<T> {
 // tslint:disable-next-line:max-classes-per-file
 export class SQLStreamWriter<T> {
   list: T[] = []
-  size = 0
-  pool?: ConnectionPool
   version?: string
-  execBatch?: (statements: Statement[]) => Promise<number>
-  map?: (v: T) => T
   param?: (i: number) => string
   constructor(
-    pool: ConnectionPool | ((statements: Statement[]) => Promise<number>),
-    public table: string,
-    public attributes: Attributes,
-    size?: number,
-    toDB?: (v: T) => T,
+    protected pool: ConnectionPool,
+    protected table: string,
+    protected attributes: Attributes,
+    protected size: number = 5000,
+    protected map?: (v: T) => T,
     buildParam?: (i: number) => string,
   ) {
     this.write = this.write.bind(this)
     this.flush = this.flush.bind(this)
-    if (typeof pool === "function") {
-      this.execBatch = pool
-    } else {
-      this.pool = pool
-    }
-    this.param = buildParam
-    this.map = toDB
+    this.param = buildParam ? buildParam : param
     const x = version(attributes)
     if (x) {
       this.version = x.name
-    }
-    if (size) {
-      this.size = size
     }
   }
   write(obj: T): Promise<number> {
@@ -552,17 +522,10 @@ export class SQLStreamWriter<T> {
       const total = this.list.length
       const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.version, this.param)
       if (stmt) {
-        if (this.execBatch) {
-          return this.execBatch(stmt).then((r) => {
-            this.list = []
-            return total
-          })
-        } else {
-          return executeBatch(this.pool as any, stmt).then((r) => {
-            this.list = []
-            return total
-          })
-        }
+        return executeBatch(this.pool, stmt).then((r) => {
+          this.list = []
+          return total
+        })
       } else {
         return Promise.resolve(0)
       }
@@ -571,28 +534,19 @@ export class SQLStreamWriter<T> {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLBatchWriter<T> {
-  pool?: ConnectionPool
   version?: string
-  execute?: (statements: Statement[]) => Promise<number>
-  map?: (v: T) => T
   param?: (i: number) => string
   constructor(
-    db: ConnectionPool | ((statements: Statement[]) => Promise<number>),
-    public table: string,
-    public attributes: Attributes,
-    public oneIfSuccess?: boolean,
-    toDB?: (v: T) => T,
+    protected pool: ConnectionPool,
+    protected table: string,
+    protected attributes: Attributes,
+    protected oneIfSuccess?: boolean,
+    protected map?: (v: T) => T,
     buildParam?: (i: number) => string,
     ver?: string,
   ) {
     this.write = this.write.bind(this)
-    if (typeof db === "function") {
-      this.execute = db
-    } else {
-      this.pool = db
-    }
     this.param = buildParam
-    this.map = toDB
     if (ver && ver.length > 0) {
       this.version = ver
     } else {
@@ -616,18 +570,10 @@ export class SQLBatchWriter<T> {
     }
     const stmts = buildToSaveBatch(list, this.table, this.attributes, this.version, this.param)
     if (stmts && stmts.length > 0) {
-      if (this.execute) {
-        if (this.oneIfSuccess) {
-          return this.execute(stmts).then((ct) => stmts.length)
-        } else {
-          return this.execute(stmts)
-        }
+      if (this.oneIfSuccess) {
+        return executeBatch(this.pool, stmts).then((ct) => stmts.length)
       } else {
-        if (this.oneIfSuccess) {
-          return executeBatch(this.pool as any, stmts).then((ct) => stmts.length)
-        } else {
-          return executeBatch(this.pool as any, stmts)
-        }
+        return executeBatch(this.pool, stmts)
       }
     } else {
       return Promise.resolve(0)
