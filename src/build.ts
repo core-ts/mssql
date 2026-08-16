@@ -94,18 +94,21 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
   if (pks.length > 0) {
     for (const pk of pks) {
       if (pk.name) {
-        const attr = attrs[pk.name]
         let v = o[pk.name]
         if (v == null) {
-          v = attr.default
+          noUpdate = true
+          break
         }
-        if (!attr.ignored && !attr.noinsert) {
+      }
+    }
+    if (noUpdate === false) {
+      for (const pk of pks) {
+        if (pk.name) {
+          const attr = attrs[pk.name]
+          let v = o[pk.name]
           const field = attr.column ? attr.column : pk.name
           let x: string
-          if (v === null) {
-            x = "null"
-            noUpdate = true
-          } else if (v === "") {
+          if (v === "") {
             x = `''`
           } else if (typeof v === "number") {
             x = toString(v)
@@ -116,7 +119,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
                 const v2 = attr.true ? "" + attr.true : `'1'`
                 args.push(v2)
               } else {
-                const v2 = attr.false ? "" + attr.false : `'0'`
+                const v2 = attr.false && attr.false !== 0 ? "" + attr.false : `'0'`
                 args.push(v2)
               }
             } else {
@@ -127,53 +130,51 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
         }
       }
     }
-    for (const k of ks) {
-      const v = o[k]
-      if (v !== undefined) {
+    if (noUpdate === false) {
+      for (const k of ks) {
+        let v = o[k]
         const attr = attrs[k]
-        if (!attr.key && !attr.ignored && k !== ver && !attr.noupdate) {
-          const field = attr.column ? attr.column : k
-          let x: string
-          if (v === null) {
-            x = "null"
-          } else if (v === "") {
-            x = `''`
-          } else if (typeof v === "number") {
-            x = toString(v)
-          } else if (typeof v === "boolean") {
-            x = buildParam(i++)
-            if (v === true) {
-              const v2 = attr.true ? attr.true : `'1'`
-              args.push(v2)
-            } else {
-              const v2 = attr.false && attr.false !== 0 ? attr.false : `'0'`
-              args.push(v2)
-            }
-          } else {
-            if (attr.type === "datetime" && typeof v === "string" && resource.ignoreDatetime) {
-              x = `'${v}'`
-            } else {
+        if (v == null) {
+          v = attr.default
+        }
+        if (v !== undefined) {
+          if (!attr.key && !attr.ignored && k !== ver && !attr.noupdate) {
+            const field = attr.column ? attr.column : k
+            let x: string
+            if (v === null) {
+              x = "null"
+            } else if (v === "") {
+              x = `''`
+            } else if (typeof v === "number") {
+              x = toString(v)
+            } else if (typeof v === "boolean") {
               x = buildParam(i++)
-              args.push(v)
+              if (v === true) {
+                const v2 = attr.true ? attr.true : `'1'`
+                args.push(v2)
+              } else {
+                const v2 = attr.false && attr.false !== 0 ? attr.false : `'0'`
+                args.push(v2)
+              }
+            } else {
+              if (attr.type === "datetime" && typeof v === "string" && resource.ignoreDatetime) {
+                x = `'${v}'`
+              } else {
+                x = buildParam(i++)
+                args.push(v)
+              }
             }
+            colSet.push(`${field}=${x}`)
           }
-          colSet.push(`${field}=${x}`)
         }
       }
-    }
-    for (const pk of pks) {
-      if (pk.name) {
-        const v = o[pk.name]
-        if (v == null) {
-          noUpdate = true
-          break
-        } else {
+      for (const pk of pks) {
+        if (pk.name) {
+          const v = o[pk.name]
           const attr = attrs[pk.name]
           const field = attr.column ? attr.column : pk.name
           let x: string
-          if (v === null) {
-            x = "null"
-          } else if (v === "") {
+          if (v === "") {
             x = `''`
           } else if (typeof v === "number") {
             x = toString(v)
@@ -184,7 +185,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
                 const v2 = attr.true ? "" + attr.true : `'1'`
                 args.push(v2)
               } else {
-                const v2 = attr.false ? "" + attr.false : `'0'`
+                const v2 = attr.false && attr.false !== 0 ? "" + attr.false : `'0'`
                 args.push(v2)
               }
             } else {
