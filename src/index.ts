@@ -1,4 +1,4 @@
-import { ConnectionPool, Request, Transaction } from "mssql"
+import sql from "mssql"
 import { buildToSave, buildToSaveBatch, param, resource } from "./build"
 import { Attribute, Attributes, DB, Statement, StringMap, Tx } from "./metadata"
 
@@ -7,7 +7,7 @@ export * from "./metadata"
 
 // tslint:disable-next-line:max-classes-per-file
 export class PoolManager implements DB {
-  constructor(protected pool: ConnectionPool) {
+  constructor(protected pool: sql.ConnectionPool) {
     this.param = this.param.bind(this)
     this.execute = this.execute.bind(this)
     this.executeBatch = this.executeBatch.bind(this)
@@ -17,7 +17,7 @@ export class PoolManager implements DB {
     this.count = this.count.bind(this)
   }
   beginTransaction(): Promise<Tx> {
-    const transaction = new Transaction(this.pool)
+    const transaction = new sql.Transaction(this.pool)
     const tx = new SqlTransaction(transaction)
     return Promise.resolve(tx)
   }
@@ -51,7 +51,7 @@ export class PoolManager implements DB {
   }
 }
 export class SqlTransaction implements Tx {
-  constructor(protected tx: Transaction) {
+  constructor(protected tx: sql.Transaction) {
     this.param = this.param.bind(this)
     this.execute = this.execute.bind(this)
     this.executeBatch = this.executeBatch.bind(this)
@@ -95,16 +95,16 @@ export class SqlTransaction implements Tx {
     return count(p, q, args)
   }
 }
-export async function executeBatch(pool: ConnectionPool, statements: Statement[], firstSuccess?: boolean): Promise<number> {
+export async function executeBatch(pool: sql.ConnectionPool, statements: Statement[], firstSuccess?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
   } else if (statements.length === 1) {
     return execute(pool, statements[0].query, statements[0].params)
   }
-  const transaction = new Transaction(pool)
+  const transaction = new sql.Transaction(pool)
   return executeBatchTx(transaction, statements, firstSuccess)
 }
-export async function executeBatchTx(transaction: Transaction, statements: Statement[], firstSuccess?: boolean): Promise<number> {
+export async function executeBatchTx(transaction: sql.Transaction, statements: Statement[], firstSuccess?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
   } else if (statements.length === 1) {
@@ -115,7 +115,7 @@ export async function executeBatchTx(transaction: Transaction, statements: State
     try {
       const query0 = statements[0]
       const queries = statements.slice(1)
-      const request = new Request(transaction)
+      const request = new sql.Request(transaction)
       await transaction.begin()
       request.parameters = {}
       setParameters(request, query0.params)
@@ -138,7 +138,7 @@ export async function executeBatchTx(transaction: Transaction, statements: State
     }
   } else {
     try {
-      const request = new Request(transaction)
+      const request = new sql.Request(transaction)
       await transaction.begin()
       for (const item of statements) {
         request.parameters = {}
@@ -164,7 +164,7 @@ function buildError(err: any): any {
   }
   return err
 }
-export function execute(db: ConnectionPool | Transaction, q: string, args?: any[]): Promise<number> {
+export function execute(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[]): Promise<number> {
   const request = db.request()
   setParameters(request, args)
   return request
@@ -175,7 +175,7 @@ export function execute(db: ConnectionPool | Transaction, q: string, args?: any[
       throw err
     })
 }
-export function query<T>(db: ConnectionPool | Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T[]> {
+export function query<T>(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T[]> {
   const request = db.request()
   setParameters(request, args)
   return request.query<T>(q).then((results) => {
@@ -183,7 +183,7 @@ export function query<T>(db: ConnectionPool | Transaction, q: string, args?: any
   })
 }
 
-export function queryOne<T>(db: ConnectionPool | Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
+export function queryOne<T>(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
   return query<T[]>(db, q, args, m, bools)
     .then((results) => {
       if (results && results.length > 0) {
@@ -196,7 +196,7 @@ export function queryOne<T>(db: ConnectionPool | Transaction, q: string, args?: 
       throw err
     })
 }
-export function executeScalar<T>(db: ConnectionPool | Transaction, q: string, args?: any[]): Promise<T | null> {
+export function executeScalar<T>(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[]): Promise<T | null> {
   return queryOne<T>(db, q, args).then((r) => {
     if (!r) {
       return null
@@ -206,10 +206,18 @@ export function executeScalar<T>(db: ConnectionPool | Transaction, q: string, ar
     }
   })
 }
-export function count(db: ConnectionPool, q: string, args?: any[]): Promise<number> {
+export function count(db: sql.ConnectionPool, q: string, args?: any[]): Promise<number> {
   return executeScalar<number>(db, q, args).then((res) => (res !== null ? res : 0))
 }
-export function save<T>(db: ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
+export function save<T>(
+  db: sql.ConnectionPool | ((sql: string, args?: any[]) => Promise<number>),
+  obj: T,
+  table: string,
+  attrs: Attributes,
+  ver?: string,
+  buildParam?: (i: number) => string,
+  i?: number,
+): Promise<number> {
   const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i)
   if (!stm) {
     return Promise.resolve(0)
@@ -221,7 +229,14 @@ export function save<T>(db: ConnectionPool | ((sql: string, args?: any[]) => Pro
     }
   }
 }
-export function saveBatch<T>(db: ConnectionPool | ((statements: Statement[]) => Promise<number>), objs: T[], table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string): Promise<number> {
+export function saveBatch<T>(
+  db: sql.ConnectionPool | ((statements: Statement[]) => Promise<number>),
+  objs: T[],
+  table: string,
+  attrs: Attributes,
+  ver?: string,
+  buildParam?: (i: number) => string,
+): Promise<number> {
   const stmts = buildToSaveBatch(objs, table, attrs, ver, buildParam)
   if (!stmts || stmts.length === 0) {
     return Promise.resolve(0)
@@ -233,7 +248,7 @@ export function saveBatch<T>(db: ConnectionPool | ((statements: Statement[]) => 
     }
   }
 }
-export function setParameters(request: Request, args?: any[]): void {
+export function setParameters(request: sql.Request, args?: any[]): void {
   if (args && args.length > 0) {
     const l = args.length
     for (let i = 0; i < l; i++) {
@@ -438,7 +453,7 @@ export class SQLWriter<T> {
   param?: (i: number) => string
   version?: string
   constructor(
-    protected pool: ConnectionPool,
+    protected pool: sql.ConnectionPool,
     protected table: string,
     protected attributes: Attributes,
     protected oneIfSuccess?: boolean,
@@ -483,7 +498,7 @@ export class SQLStreamWriter<T> {
   version?: string
   param?: (i: number) => string
   constructor(
-    protected pool: ConnectionPool,
+    protected pool: sql.ConnectionPool,
     protected table: string,
     protected attributes: Attributes,
     protected size: number = 5000,
@@ -537,7 +552,7 @@ export class SQLBatchWriter<T> {
   version?: string
   param?: (i: number) => string
   constructor(
-    protected pool: ConnectionPool,
+    protected pool: sql.ConnectionPool,
     protected table: string,
     protected attributes: Attributes,
     protected oneIfSuccess?: boolean,
@@ -592,7 +607,7 @@ export interface HealthChecker {
 // tslint:disable-next-line:max-classes-per-file
 export class SQLChecker implements HealthChecker {
   constructor(
-    protected readonly pool: ConnectionPool,
+    protected readonly pool: sql.ConnectionPool,
     protected service: string = "mssql",
     protected readonly timeout = 4500,
   ) {}
@@ -614,7 +629,10 @@ export class SQLChecker implements HealthChecker {
     try {
       const start = Date.now()
 
-      await Promise.race([this.pool.request().query("SELECT 1"), new Promise((_, reject) => setTimeout(() => reject(new Error("Health check timeout")), this.timeout))])
+      await Promise.race([
+        this.pool.request().query("SELECT 1"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Health check timeout")), this.timeout)),
+      ])
 
       return this.build(
         {
@@ -642,7 +660,7 @@ export interface FileWriter {
 // tslint:disable-next-line:max-classes-per-file
 export class Exporter<T> {
   constructor(
-    protected pool: ConnectionPool,
+    protected pool: sql.ConnectionPool,
     protected filename: string,
     protected buildQuery: (ctx?: any) => Promise<Statement>,
     protected format: (row: T) => string,
@@ -715,7 +733,7 @@ export interface SimpleMap {
 // tslint:disable-next-line:max-classes-per-file
 export class ExportService<T> {
   constructor(
-    protected pool: ConnectionPool,
+    protected pool: sql.ConnectionPool,
     protected filename: string,
     protected queryBuilder: QueryBuilder,
     protected formatter: Formatter<T>,
