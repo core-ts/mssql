@@ -209,15 +209,7 @@ export function executeScalar<T>(db: sql.ConnectionPool | sql.Transaction, q: st
 export function count(db: sql.ConnectionPool, q: string, args?: any[]): Promise<number> {
   return executeScalar<number>(db, q, args).then((res) => (res !== null ? res : 0))
 }
-export function save<T>(
-  db: sql.ConnectionPool | ((sql: string, args?: any[]) => Promise<number>),
-  obj: T,
-  table: string,
-  attrs: Attributes,
-  ver?: string,
-  buildParam?: (i: number) => string,
-  i?: number,
-): Promise<number> {
+export function save<T>(db: sql.ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
   const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i)
   if (!stm) {
     return Promise.resolve(0)
@@ -229,14 +221,7 @@ export function save<T>(
     }
   }
 }
-export function saveBatch<T>(
-  db: sql.ConnectionPool | ((statements: Statement[]) => Promise<number>),
-  objs: T[],
-  table: string,
-  attrs: Attributes,
-  ver?: string,
-  buildParam?: (i: number) => string,
-): Promise<number> {
+export function saveBatch<T>(db: sql.ConnectionPool | ((statements: Statement[]) => Promise<number>), objs: T[], table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string): Promise<number> {
   const stmts = buildToSaveBatch(objs, table, attrs, ver, buildParam)
   if (!stmts || stmts.length === 0) {
     return Promise.resolve(0)
@@ -481,7 +466,7 @@ export class SQLWriter<T> {
       obj2 = this.map(obj)
     }
     const stmt = buildToSave(obj2, this.table, this.attributes, this.version, this.param)
-    if (stmt) {
+    if (stmt.query) {
       if (this.oneIfSuccess) {
         return execute(this.pool, stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0))
       } else {
@@ -536,7 +521,7 @@ export class SQLStreamWriter<T> {
     } else {
       const total = this.list.length
       const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.version, this.param)
-      if (stmt) {
+      if (stmt.length > 0) {
         return executeBatch(this.pool, stmt).then((r) => {
           this.list = []
           return total
@@ -561,7 +546,7 @@ export class SQLBatchWriter<T> {
     ver?: string,
   ) {
     this.write = this.write.bind(this)
-    this.param = buildParam
+    this.param = buildParam ? buildParam : param
     if (ver && ver.length > 0) {
       this.version = ver
     } else {
@@ -629,10 +614,7 @@ export class SQLChecker implements HealthChecker {
     try {
       const start = Date.now()
 
-      await Promise.race([
-        this.pool.request().query("SELECT 1"),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Health check timeout")), this.timeout)),
-      ])
+      await Promise.race([this.pool.request().query("SELECT 1"), new Promise((_, reject) => setTimeout(() => reject(new Error("Health check timeout")), this.timeout))])
 
       return this.build(
         {

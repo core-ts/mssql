@@ -64,7 +64,7 @@ export function metadata(attrs: Attributes): Metadata {
   }
   return m
 }
-export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, pks?: Attribute[], i?: number): Statement | undefined {
+export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, pks?: Attribute[], i?: number): Statement {
   if (!i) {
     i = 1
   }
@@ -94,11 +94,12 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
   if (pks.length > 0) {
     for (const pk of pks) {
       if (pk.name) {
-        const v = o[pk.name]
-        if (!v) {
-          return undefined
-        } else {
-          const attr = attrs[pk.name]
+        const attr = attrs[pk.name]
+        let v = o[pk.name]
+        if (v == null) {
+          v = attr.default
+        }
+        if (!attr.ignored && !attr.noinsert) {
           const field = attr.column ? attr.column : pk.name
           let x: string
           if (v === null) {
@@ -140,24 +141,16 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
           } else if (typeof v === "number") {
             x = toString(v)
           } else if (typeof v === "boolean") {
-            if (attr.true === undefined) {
-              if (v === true) {
-                x = `'1'`
-              } else {
-                x = `'0'`
-              }
+            x = buildParam(i++)
+            if (v === true) {
+              const v2 = attr.true ? attr.true : `'1'`
+              args.push(v2)
             } else {
-              x = buildParam(i++)
-              if (v === true) {
-                const v2 = attr.true ? attr.true : `'1'`
-                args.push(v2)
-              } else {
-                const v2 = attr.false ? attr.false : `'0'`
-                args.push(v2)
-              }
+              const v2 = attr.false && attr.false !== 0 ? attr.false : `'0'`
+              args.push(v2)
             }
           } else {
-            if (resource.ignoreDatetime && typeof v === "string" && attr.type === "datetime") {
+            if (attr.type === "datetime" && typeof v === "string" && resource.ignoreDatetime) {
               x = `'${v}'`
             } else {
               x = buildParam(i++)
@@ -221,25 +214,17 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
         } else if (typeof v === "number") {
           values.push(toString(v))
         } else if (typeof v === "boolean") {
-          if (attr.true === undefined) {
-            if (v === true) {
-              values.push(`true`)
-            } else {
-              values.push(`false`)
-            }
+          const p = buildParam(i++)
+          values.push(p)
+          if (v === true) {
+            const v2 = attr.true ? attr.true : `'1'`
+            args.push(v2)
           } else {
-            const p = buildParam(i++)
-            values.push(p)
-            if (v === true) {
-              const v2 = attr.true ? attr.true : `'1'`
-              args.push(v2)
-            } else {
-              const v2 = attr.false ? attr.false : `'0'`
-              args.push(v2)
-            }
+            const v2 = attr.false && attr.false !== 0 ? attr.false : `'0'`
+            args.push(v2)
           }
         } else {
-          if (resource.ignoreDatetime && typeof v === "string" && attr.type === "datetime") {
+          if (attr.type === "datetime" && resource.ignoreDatetime && typeof v === "string") {
             values.push(`'${v}'`)
           } else {
             const p = buildParam(i++)
@@ -251,7 +236,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
     }
   }
   if (pks.length === 0 && cols.length === 0) {
-    return undefined
+    return { query: "", params: args }
   }
   if (!isVersion && ver && ver.length > 0) {
     const attr = attrs[ver]
@@ -298,7 +283,7 @@ export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes,
   }
   for (const obj of objs) {
     const smt = buildToSave(obj, table, attrs, ver, buildParam, pks)
-    if (smt) {
+    if (smt.query) {
       sts.push(smt)
     }
   }
