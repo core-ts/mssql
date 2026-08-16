@@ -164,7 +164,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
     for (const pk of pks) {
       if (pk.name) {
         const v = o[pk.name]
-        if (!v) {
+        if (v == null) {
           noUpdate = true
           break
         } else {

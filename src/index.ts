@@ -629,7 +629,7 @@ export class SQLChecker implements HealthChecker {
 }
 
 export interface QueryBuilder {
-  buildQuery(ctx?: any): Promise<Statement>
+  build(ctx?: any): Promise<Statement>
 }
 export interface Formatter<T> {
   format: (row: T) => string
@@ -732,7 +732,7 @@ export class ExportService<T> {
   map?: StringMap
   async export(ctx?: any): Promise<number> {
     const pool = await this.pool.connect()
-    const stmt = await this.queryBuilder.buildQuery(ctx)
+    const stmt = await this.queryBuilder.build(ctx)
     const request = pool.request()
     request.stream = true
     request.query(stmt.query)
