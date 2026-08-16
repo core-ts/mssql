@@ -11,12 +11,7 @@
     "sourceMap": false,
     "declaration": false,
     "experimentalDecorators": false,
-    "removeComments": true,
-    "lib": [
-      "es6",
-      "es7"
-    ],
-    "types": ["node"]
+    "removeComments": true
   },
   "include": [
     "src/**/*.ts"
