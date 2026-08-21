@@ -10,7 +10,7 @@ export interface Executor {
   driver: string
   param(i: number): string
   execute(sql: string, args?: any[], ctx?: any): Promise<number>
-  executeBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number>
+  executeBatch(statements: Statement[], firstAffected?: boolean, ctx?: any): Promise<number>
   query<T>(sql: string, args?: any[], m?: StringMap, bools?: Attribute[], ctx?: any): Promise<T[]>
   queryOne<T>(sql: string, args?: any[], m?: StringMap, bools?: Attribute[], ctx?: any): Promise<T | null>
   executeScalar<T>(sql: string, args?: any[], ctx?: any): Promise<T | null>
@@ -27,7 +27,7 @@ export interface MinDB {
   driver: string
   param(i: number): string
   execute(sql: string, args?: any[], ctx?: any): Promise<number>
-  executeBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number>
+  executeBatch(statements: Statement[], firstAffected?: boolean, ctx?: any): Promise<number>
   query<T>(sql: string, args?: any[], m?: StringMap, bools?: Attribute[], ctx?: any): Promise<T[]>
 }
 export type DataType = "ObjectId" | "date" | "datetime" | "time" | "boolean" | "number" | "integer" | "string" | "text" | "object" | "array" | "binary" | "primitives" | "booleans" | "numbers" | "integers" | "strings" | "dates" | "datetimes" | "times"

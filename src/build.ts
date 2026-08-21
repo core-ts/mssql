@@ -3,10 +3,9 @@ import { Attribute, Attributes, Statement, StringMap } from "./metadata"
 // tslint:disable-next-line:class-name
 export class resource {
   static string?: boolean
-  static ignoreDatetime?: boolean
 }
 export function param(i: number): string {
-  return "@" + i
+  return "@p" + i
 }
 export function params(length: number, from?: number): string[] {
   if (from == null) {
@@ -116,10 +115,10 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
             x = buildParam(i++)
             if (typeof v === "boolean") {
               if (v === true) {
-                const v2 = attr.true ? "" + attr.true : `'1'`
+                const v2 = attr.true !== undefined ? attr.true : 1
                 args.push(v2)
               } else {
-                const v2 = attr.false && attr.false !== 0 ? "" + attr.false : `'0'`
+                const v2 = attr.false !== undefined ? attr.false : 0
                 args.push(v2)
               }
             } else {
@@ -134,7 +133,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
       for (const k of ks) {
         let v = o[k]
         const attr = attrs[k]
-        if (v == null) {
+        if (v === undefined && attr.default !== undefined) {
           v = attr.default
         }
         if (v !== undefined) {
@@ -150,19 +149,15 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
             } else if (typeof v === "boolean") {
               x = buildParam(i++)
               if (v === true) {
-                const v2 = attr.true ? attr.true : `'1'`
+                const v2 = attr.true !== undefined ? attr.true : 1
                 args.push(v2)
               } else {
-                const v2 = attr.false && attr.false !== 0 ? attr.false : `'0'`
+                const v2 = attr.false !== undefined ? attr.false : 0
                 args.push(v2)
               }
             } else {
-              if (attr.type === "datetime" && typeof v === "string" && resource.ignoreDatetime) {
-                x = `'${v}'`
-              } else {
-                x = buildParam(i++)
-                args.push(v)
-              }
+              x = buildParam(i++)
+              args.push(v)
             }
             colSet.push(`${field}=${x}`)
           }
@@ -182,10 +177,10 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
             x = buildParam(i++)
             if (typeof v === "boolean") {
               if (v === true) {
-                const v2 = attr.true ? "" + attr.true : `'1'`
+                const v2 = attr.true !== undefined ? attr.true : 1
                 args.push(v2)
               } else {
-                const v2 = attr.false && attr.false !== 0 ? "" + attr.false : `'0'`
+                const v2 = attr.false !== undefined ? attr.false : 0
                 args.push(v2)
               }
             } else {
@@ -200,7 +195,7 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
   for (const k of ks) {
     const attr = attrs[k]
     let v = o[k]
-    if (v == null) {
+    if (v === undefined && attr.default !== undefined) {
       v = attr.default
     }
     if (v != null && !attr.ignored && !attr.noinsert) {
@@ -218,25 +213,20 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
           const p = buildParam(i++)
           values.push(p)
           if (v === true) {
-            const v2 = attr.true ? attr.true : `'1'`
+            const v2 = attr.true !== undefined ? attr.true : 1
             args.push(v2)
           } else {
-            const v2 = attr.false && attr.false !== 0 ? attr.false : `'0'`
+            const v2 = attr.false !== undefined ? attr.false : 0
             args.push(v2)
           }
         } else {
-          if (attr.type === "datetime" && resource.ignoreDatetime && typeof v === "string") {
-            values.push(`'${v}'`)
-          } else {
-            const p = buildParam(i++)
-            values.push(p)
-            args.push(v)
-          }
+          values.push(buildParam(i++))
+          args.push(v)
         }
       }
     }
   }
-  if (pks.length === 0 && cols.length === 0) {
+  if (cols.length === 0) {
     return { query: "", params: args }
   }
   if (!isVersion && ver && ver.length > 0) {
@@ -245,9 +235,11 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, ver?: s
     cols.push(field)
     values.push(`${1}`)
   }
-  if (noUpdate || pks.length === 0 || colSet.length === 0) {
+  if (noUpdate || pks.length === 0) {
     const q = `insert into ${table}(${cols.join(",")})values(${values.join(",")})`
     return { query: q, params: args }
+  } else if (colSet.length === 0) {
+    return { query: "", params: args }
   } else {
     if (ver && ver.length > 0) {
       const v = o[ver]

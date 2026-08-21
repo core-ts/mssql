@@ -23,15 +23,15 @@ export class PoolManager implements DB {
   }
   driver = "mssql"
   param(i: number): string {
-    return "@" + i
+    return "@p" + i
   }
   execute(q: string, args?: any[], ctx?: any): Promise<number> {
     const p = ctx ? ctx : this.pool
     return execute(p, q, args)
   }
-  executeBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number> {
+  executeBatch(statements: Statement[], firstAffected?: boolean, ctx?: any): Promise<number> {
     const p = ctx ? ctx : this.pool
-    return executeBatch(p, statements, firstSuccess)
+    return executeBatch(p, statements, firstAffected)
   }
   query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
     const p = ctx ? ctx : this.pool
@@ -68,15 +68,15 @@ export class SqlTransaction implements Tx {
   }
   driver = "mssql"
   param(i: number): string {
-    return "@" + i
+    return "@p" + i
   }
   execute(q: string, args?: any[], ctx?: any): Promise<number> {
     const p = ctx ? ctx : this.tx
     return execute(p, q, args)
   }
-  executeBatch(statements: Statement[], firstSuccess?: boolean, ctx?: any): Promise<number> {
+  executeBatch(statements: Statement[], firstAffected?: boolean, ctx?: any): Promise<number> {
     const p = ctx ? ctx : this.tx
-    return executeBatch(p, statements, firstSuccess)
+    return executeBatch(p, statements, firstAffected)
   }
   query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
     const p = ctx ? ctx : this.tx
@@ -95,35 +95,34 @@ export class SqlTransaction implements Tx {
     return count(p, q, args)
   }
 }
-export async function executeBatch(pool: sql.ConnectionPool, statements: Statement[], firstSuccess?: boolean): Promise<number> {
+export async function executeBatch(pool: sql.ConnectionPool, statements: Statement[], firstAffected?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
   } else if (statements.length === 1) {
     return execute(pool, statements[0].query, statements[0].params)
   }
   const transaction = new sql.Transaction(pool)
-  return executeBatchTx(transaction, statements, firstSuccess)
+  return executeBatchTx(transaction, statements, firstAffected)
 }
-export async function executeBatchTx(transaction: sql.Transaction, statements: Statement[], firstSuccess?: boolean): Promise<number> {
+export async function executeBatchTx(transaction: sql.Transaction, statements: Statement[], firstAffected?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
   } else if (statements.length === 1) {
     return execute(transaction, statements[0].query, statements[0].params)
   }
   let c = 0
-  if (firstSuccess) {
+  if (firstAffected) {
     try {
       const query0 = statements[0]
       const queries = statements.slice(1)
-      const request = new sql.Request(transaction)
       await transaction.begin()
-      request.parameters = {}
-      setParameters(request, query0.params)
-      const result1 = await request.query(query0.query)
+      const request0 = new sql.Request(transaction)
+      setParameters(request0, query0.params)
+      const result1 = await request0.query(query0.query)
       if (result1 && result1.rowsAffected[0] !== 0) {
         c += result1.rowsAffected[0]
         for (const q of queries) {
-          request.parameters = {}
+          const request = new sql.Request(transaction)
           setParameters(request, q.params)
           const result = await request.query(q.query)
           c += result.rowsAffected[0]
@@ -133,15 +132,18 @@ export async function executeBatchTx(transaction: sql.Transaction, statements: S
       return c
     } catch (err) {
       buildError(err)
-      await transaction.rollback()
+      try {
+        await transaction.rollback()
+      } catch {
+        // preserve original error
+      }
       throw err
     }
   } else {
     try {
-      const request = new sql.Request(transaction)
       await transaction.begin()
       for (const item of statements) {
-        request.parameters = {}
+        const request = new sql.Request(transaction)
         setParameters(request, item.params)
         const result = await request.query(item.query)
         c += result.rowsAffected[0]
@@ -149,7 +151,12 @@ export async function executeBatchTx(transaction: sql.Transaction, statements: S
       await transaction.commit()
       return c
     } catch (err) {
-      await transaction.rollback()
+      buildError(err)
+      try {
+        await transaction.rollback()
+      } catch {
+        // preserve original error
+      }
       throw err
     }
   }
@@ -211,7 +218,7 @@ export function count(db: sql.ConnectionPool, q: string, args?: any[]): Promise<
 }
 export function save<T>(db: sql.ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
   const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i)
-  if (!stm) {
+  if (!stm.query) {
     return Promise.resolve(0)
   } else {
     if (typeof db === "function") {
@@ -239,21 +246,21 @@ export function setParameters(request: sql.Request, args?: any[]): void {
     for (let i = 0; i < l; i++) {
       const j = i + 1
       if (args[i] === undefined || args[i] == null) {
-        request.input(`${j}`, null)
+        request.input(`p${j}`, null)
       } else {
         if (typeof args[i] === "object") {
           if (args[i] instanceof Date) {
-            request.input(`${j}`, args[i])
+            request.input(`p${j}`, args[i])
           } else {
             if (resource.string) {
               const s: string = JSON.stringify(args[i])
-              request.input(`${j}`, s)
+              request.input(`p${j}`, s)
             } else {
-              request.input(`${j}`, args[i])
+              request.input(`p${j}`, args[i])
             }
           }
         } else {
-          request.input(`${j}`, args[i])
+          request.input(`p${j}`, args[i])
         }
       }
     }
@@ -519,14 +526,14 @@ export class SQLStreamWriter<T> {
     if (!this.list || this.list.length === 0) {
       return Promise.resolve(0)
     } else {
-      const total = this.list.length
       const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.version, this.param)
       if (stmt.length > 0) {
         return executeBatch(this.pool, stmt).then((r) => {
           this.list = []
-          return total
+          return stmt.length
         })
       } else {
+        this.list = []
         return Promise.resolve(0)
       }
     }

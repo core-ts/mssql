@@ -189,7 +189,7 @@ For an empty batch, the function returns `0`. For a single statement, it directl
 
 ## Conditional Batch Execution
 
-`executeBatch()` supports the `firstSuccess` option:
+`executeBatch()` supports the `firstAffected` option:
 
 ```typescript
 await db.executeBatch(
@@ -214,7 +214,7 @@ await db.executeBatch(
 )
 ```
 
-When `firstSuccess` is enabled, the first statement is executed first. The remaining statements are executed only when the first statement reports affected rows.
+When `firstAffected` is enabled, the first statement is executed first. The remaining statements are executed only when the first statement reports affected rows.
 
 ## Transactions
 
