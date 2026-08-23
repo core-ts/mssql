@@ -23,13 +23,6 @@ export interface Tx extends Executor {
 export interface DB extends Executor {
   beginTransaction(): Promise<Tx>
 }
-export interface MinDB {
-  driver: string
-  param(i: number): string
-  execute(sql: string, args?: any[], ctx?: any): Promise<number>
-  executeBatch(statements: Statement[], firstAffected?: boolean, ctx?: any): Promise<number>
-  query<T>(sql: string, args?: any[], m?: StringMap, bools?: Attribute[], ctx?: any): Promise<T[]>
-}
 export type DataType = "ObjectId" | "date" | "datetime" | "time" | "boolean" | "number" | "integer" | "string" | "text" | "object" | "array" | "binary" | "primitives" | "booleans" | "numbers" | "integers" | "strings" | "dates" | "datetimes" | "times"
 
 export interface Attribute {

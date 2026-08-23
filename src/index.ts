@@ -1,5 +1,5 @@
 import sql from "mssql"
-import { buildToSave, buildToSaveBatch, param, resource } from "./build"
+import { buildToSave, buildToSaveBatch, metadata, param, resource } from "./build"
 import { Attribute, Attributes, DB, Statement, StringMap, Tx } from "./metadata"
 
 export * from "./build"
@@ -216,30 +216,7 @@ export function executeScalar<T>(db: sql.ConnectionPool | sql.Transaction, q: st
 export function count(db: sql.ConnectionPool, q: string, args?: any[]): Promise<number> {
   return executeScalar<number>(db, q, args).then((res) => (res !== null ? res : 0))
 }
-export function save<T>(db: sql.ConnectionPool | ((sql: string, args?: any[]) => Promise<number>), obj: T, table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string, i?: number): Promise<number> {
-  const stm = buildToSave(obj, table, attrs, ver, buildParam, undefined, i)
-  if (!stm.query) {
-    return Promise.resolve(0)
-  } else {
-    if (typeof db === "function") {
-      return db(stm.query, stm.params)
-    } else {
-      return execute(db, stm.query, stm.params)
-    }
-  }
-}
-export function saveBatch<T>(db: sql.ConnectionPool | ((statements: Statement[]) => Promise<number>), objs: T[], table: string, attrs: Attributes, ver?: string, buildParam?: (i: number) => string): Promise<number> {
-  const stmts = buildToSaveBatch(objs, table, attrs, ver, buildParam)
-  if (!stmts || stmts.length === 0) {
-    return Promise.resolve(0)
-  } else {
-    if (typeof db === "function") {
-      return db(stmts)
-    } else {
-      return executeBatch(db, stmts)
-    }
-  }
-}
+
 export function setParameters(request: sql.Request, args?: any[]): void {
   if (args && args.length > 0) {
     const l = args.length
@@ -442,8 +419,9 @@ export function version(attrs: Attributes): Attribute | undefined {
 }
 // tslint:disable-next-line:max-classes-per-file
 export class SQLWriter<T> {
-  param?: (i: number) => string
-  version?: string
+  protected keys: Attribute[]
+  protected version?: string
+  protected param?: (i: number) => string
   constructor(
     protected pool: sql.ConnectionPool,
     protected table: string,
@@ -451,18 +429,12 @@ export class SQLWriter<T> {
     protected oneIfSuccess?: boolean,
     protected map?: (v: T) => T,
     buildParam?: (i: number) => string,
-    ver?: string,
   ) {
     this.write = this.write.bind(this)
     this.param = buildParam ? buildParam : param
-    if (ver && ver.length > 0) {
-      this.version = ver
-    } else {
-      const x = version(this.attributes)
-      if (x) {
-        this.version = x.name
-      }
-    }
+    const m = metadata(attributes)
+    this.keys = m.keys
+    this.version = m.version
   }
   write(obj: T): Promise<number> {
     if (!obj) {
@@ -472,7 +444,7 @@ export class SQLWriter<T> {
     if (this.map) {
       obj2 = this.map(obj)
     }
-    const stmt = buildToSave(obj2, this.table, this.attributes, this.version, this.param)
+    const stmt = buildToSave(obj2, this.table, this.attributes, this.keys, this.version, this.param)
     if (stmt.query) {
       if (this.oneIfSuccess) {
         return execute(this.pool, stmt.query, stmt.params).then((ct) => (ct > 0 ? 1 : 0))
@@ -485,10 +457,11 @@ export class SQLWriter<T> {
   }
 }
 // tslint:disable-next-line:max-classes-per-file
-export class SQLStreamWriter<T> {
-  list: T[] = []
-  version?: string
-  param?: (i: number) => string
+export class BufferedBatchWriter<T> {
+  protected list: T[] = []
+  protected keys: Attribute[]
+  protected version?: string
+  protected param?: (i: number) => string
   constructor(
     protected pool: sql.ConnectionPool,
     protected table: string,
@@ -500,10 +473,9 @@ export class SQLStreamWriter<T> {
     this.write = this.write.bind(this)
     this.flush = this.flush.bind(this)
     this.param = buildParam ? buildParam : param
-    const x = version(attributes)
-    if (x) {
-      this.version = x.name
-    }
+    const m = metadata(attributes)
+    this.keys = m.keys
+    this.version = m.version
   }
   write(obj: T): Promise<number> {
     if (!obj) {
@@ -526,11 +498,11 @@ export class SQLStreamWriter<T> {
     if (!this.list || this.list.length === 0) {
       return Promise.resolve(0)
     } else {
-      const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.version, this.param)
+      const stmt = buildToSaveBatch(this.list, this.table, this.attributes, this.keys, this.version, this.param)
       if (stmt.length > 0) {
         return executeBatch(this.pool, stmt).then((r) => {
           this.list = []
-          return stmt.length
+          return r
         })
       } else {
         this.list = []
@@ -540,28 +512,22 @@ export class SQLStreamWriter<T> {
   }
 }
 // tslint:disable-next-line:max-classes-per-file
-export class SQLBatchWriter<T> {
-  version?: string
-  param?: (i: number) => string
+export class BatchWriter<T> {
+  protected keys: Attribute[]
+  protected version?: string
+  protected param?: (i: number) => string
   constructor(
     protected pool: sql.ConnectionPool,
     protected table: string,
     protected attributes: Attributes,
-    protected oneIfSuccess?: boolean,
     protected map?: (v: T) => T,
     buildParam?: (i: number) => string,
-    ver?: string,
   ) {
     this.write = this.write.bind(this)
     this.param = buildParam ? buildParam : param
-    if (ver && ver.length > 0) {
-      this.version = ver
-    } else {
-      const x = version(this.attributes)
-      if (x) {
-        this.version = x.name
-      }
-    }
+    const m = metadata(attributes)
+    this.keys = m.keys
+    this.version = m.version
   }
   write(objs: T[]): Promise<number> {
     if (!objs || objs.length === 0) {
@@ -575,13 +541,9 @@ export class SQLBatchWriter<T> {
         list.push(obj2)
       }
     }
-    const stmts = buildToSaveBatch(list, this.table, this.attributes, this.version, this.param)
+    const stmts = buildToSaveBatch(list, this.table, this.attributes, this.keys, this.version, this.param)
     if (stmts && stmts.length > 0) {
-      if (this.oneIfSuccess) {
-        return executeBatch(this.pool, stmts).then((ct) => stmts.length)
-      } else {
-        return executeBatch(this.pool, stmts)
-      }
+      return executeBatch(this.pool, stmts)
     } else {
       return Promise.resolve(0)
     }
