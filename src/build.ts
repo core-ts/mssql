@@ -165,11 +165,10 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, pks?: A
       }
     }
     if ((ver && colSet.length > 1) || colSet.length > 0) {
-      for (const pk of pks) {
-        if (pk.name) {
-          const v = o[pk.name]
-          const attr = attrs[pk.name]
-          const field = attr.column ? attr.column : pk.name
+      for (const attr of pks) {
+        if (attr.name) {
+          const v = o[attr.name]
+          const field = attr.column ? attr.column : attr.name
           let x: string
           if (v === "") {
             x = `''`
