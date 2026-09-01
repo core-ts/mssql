@@ -46,8 +46,18 @@ export class PoolManager implements DB {
     return count(this.pool, q, args)
   }
 }
+function toErrorString(v: any): string {
+  if (typeof v === "string") {
+    return v
+  } else {
+    return JSON.stringify(v)
+  }
+}
 export class SqlTransaction implements Tx {
-  constructor(protected tx: sql.Transaction) {
+  constructor(
+    protected tx: sql.Transaction,
+    protected logError?: (err: string) => void,
+  ) {
     this.param = this.param.bind(this)
     this.execute = this.execute.bind(this)
     this.executeBatch = this.executeBatch.bind(this)
@@ -86,6 +96,9 @@ export class SqlTransaction implements Tx {
       this.state = "rolledback"
     } catch (err) {
       this.state = "unknown"
+      if (this.logError) {
+        this.logError(`Transaction rollback failed: ${toErrorString(err)}`)
+      }
     }
   }
   driver = "mssql"
