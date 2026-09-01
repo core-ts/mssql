@@ -25,29 +25,23 @@ export class PoolManager implements DB {
   param(i: number): string {
     return "@p" + i
   }
-  execute(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.pool
-    return execute(p, q, args)
+  execute(q: string, args?: any[]): Promise<number> {
+    return execute(this.pool, q, args)
   }
-  executeBatch(statements: Statement[], requireFirstAffected?: boolean, ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.pool
-    return executeBatch(p, statements, requireFirstAffected)
+  executeBatch(statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
+    return executeBatch(this.pool, statements, requireFirstAffected)
   }
-  query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
-    const p = ctx ? ctx : this.pool
-    return query(p, q, args, m, fields)
+  query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T[]> {
+    return query(this.pool, q, args, m, fields)
   }
-  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T | null> {
-    const p = ctx ? ctx : this.pool
-    return queryOne(p, q, args, m, fields)
+  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T | null> {
+    return queryOne(this.pool, q, args, m, fields)
   }
-  executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T | null> {
-    const p = ctx ? ctx : this.pool
-    return executeScalar<T>(p, q, args)
+  executeScalar<T>(q: string, args?: any[]): Promise<T | null> {
+    return executeScalar<T>(this.pool, q, args)
   }
-  count(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.pool
-    return count(p, q, args)
+  count(q: string, args?: any[]): Promise<number> {
+    return count(this.pool, q, args)
   }
 }
 export class SqlTransaction implements Tx {
@@ -70,29 +64,23 @@ export class SqlTransaction implements Tx {
   param(i: number): string {
     return "@p" + i
   }
-  execute(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.tx
-    return execute(p, q, args)
+  execute(q: string, args?: any[]): Promise<number> {
+    return execute(this.tx, q, args)
   }
-  executeBatch(statements: Statement[], requireFirstAffected?: boolean, ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.tx
-    return executeBatch(p, statements, requireFirstAffected)
+  executeBatch(statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
+    return executeBatchTx(this.tx, statements, requireFirstAffected)
   }
-  query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
-    const p = ctx ? ctx : this.tx
-    return query(p, q, args, m, fields)
+  query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T[]> {
+    return query(this.tx, q, args, m, fields)
   }
-  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T | null> {
-    const p = ctx ? ctx : this.tx
-    return queryOne(p, q, args, m, fields)
+  queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T | null> {
+    return queryOne(this.tx, q, args, m, fields)
   }
-  executeScalar<T>(q: string, args?: any[], ctx?: any): Promise<T | null> {
-    const p = ctx ? ctx : this.tx
-    return executeScalar<T>(p, q, args)
+  executeScalar<T>(q: string, args?: any[]): Promise<T | null> {
+    return executeScalar<T>(this.tx, q, args)
   }
-  count(q: string, args?: any[], ctx?: any): Promise<number> {
-    const p = ctx ? ctx : this.tx
-    return count(p, q, args)
+  count(q: string, args?: any[]): Promise<number> {
+    return count(this.tx, q, args)
   }
 }
 export async function executeBatch(pool: sql.ConnectionPool, statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
@@ -213,7 +201,7 @@ export function executeScalar<T>(db: sql.ConnectionPool | sql.Transaction, q: st
     }
   })
 }
-export function count(db: sql.ConnectionPool, q: string, args?: any[]): Promise<number> {
+export function count(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[]): Promise<number> {
   return executeScalar<number>(db, q, args).then((res) => (res !== null ? res : 0))
 }
 
