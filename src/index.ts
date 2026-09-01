@@ -47,7 +47,6 @@ export class PoolManager implements DB {
   }
 }
 export class SqlTransaction implements Tx {
-  private state: "active" | "committed" | "rolledback" = "active"
   constructor(protected tx: sql.Transaction) {
     this.param = this.param.bind(this)
     this.execute = this.execute.bind(this)
@@ -60,6 +59,7 @@ export class SqlTransaction implements Tx {
     this.rollback = this.rollback.bind(this)
     this.ensureActive = this.ensureActive.bind(this)
   }
+  private state: "active" | "committed" | "rolledback" | "unknown" = "active"
   private ensureActive(): void {
     if (this.state !== "active") {
       throw new Error(`Transaction is already ${this.state}`)
@@ -71,6 +71,7 @@ export class SqlTransaction implements Tx {
       await this.tx.commit()
       this.state = "committed"
     } catch (err) {
+      this.state = "unknown"
       // State is intentionally not changed here because commit outcome
       // may be unknown to the client.
       throw err
@@ -84,6 +85,7 @@ export class SqlTransaction implements Tx {
       await this.tx.rollback()
       this.state = "rolledback"
     } catch (err) {
+      this.state = "unknown"
     }
   }
   driver = "mssql"
@@ -91,21 +93,27 @@ export class SqlTransaction implements Tx {
     return "@p" + i
   }
   execute(q: string, args?: any[]): Promise<number> {
+    this.ensureActive()
     return execute(this.tx, q, args)
   }
   executeBatch(statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
+    this.ensureActive()
     return executeBatchTx(this.tx, statements, requireFirstAffected)
   }
   query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T[]> {
+    this.ensureActive()
     return query(this.tx, q, args, m, fields)
   }
   queryOne<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[]): Promise<T | null> {
+    this.ensureActive()
     return queryOne(this.tx, q, args, m, fields)
   }
   executeScalar<T>(q: string, args?: any[]): Promise<T | null> {
+    this.ensureActive()
     return executeScalar<T>(this.tx, q, args)
   }
   count(q: string, args?: any[]): Promise<number> {
+    this.ensureActive()
     return count(this.tx, q, args)
   }
 }
