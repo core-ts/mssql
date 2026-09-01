@@ -90,9 +90,9 @@ export async function executeBatch(pool: sql.ConnectionPool, statements: Stateme
     return execute(pool, statements[0].query, statements[0].params)
   }
   const transaction = new sql.Transaction(pool)
-  return executeBatchTx(transaction, statements, requireFirstAffected)
+  return executeBatchWithTx(transaction, statements, requireFirstAffected)
 }
-export async function executeBatchTx(transaction: sql.Transaction, statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
+export async function executeBatchWithTx(transaction: sql.Transaction, statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
   } else if (statements.length === 1) {
@@ -102,17 +102,17 @@ export async function executeBatchTx(transaction: sql.Transaction, statements: S
   if (requireFirstAffected) {
     try {
       const query0 = statements[0]
-      const queries = statements.slice(1)
       await transaction.begin()
       const request0 = new sql.Request(transaction)
       setParameters(request0, query0.params)
       const result1 = await request0.query(query0.query)
       if (result1 && result1.rowsAffected[0] !== 0) {
         c += result1.rowsAffected[0]
-        for (const q of queries) {
+        const l = statements.length
+        for (let j = 1; j < l; j++) {
           const request = new sql.Request(transaction)
-          setParameters(request, q.params)
-          const result = await request.query(q.query)
+          setParameters(request, statements[j].params)
+          const result = await request.query(statements[j].query)
           c += result.rowsAffected[0]
         }
       }
@@ -145,6 +145,49 @@ export async function executeBatchTx(transaction: sql.Transaction, statements: S
       } catch {
         // preserve original error
       }
+      throw err
+    }
+  }
+}
+export async function executeBatchTx(transaction: sql.Transaction, statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
+  if (!statements || statements.length === 0) {
+    return Promise.resolve(0)
+  } else if (statements.length === 1) {
+    return execute(transaction, statements[0].query, statements[0].params)
+  }
+  let c = 0
+  if (requireFirstAffected) {
+    try {
+      const query0 = statements[0]
+      const request0 = new sql.Request(transaction)
+      setParameters(request0, query0.params)
+      const result1 = await request0.query(query0.query)
+      if (result1 && result1.rowsAffected[0] !== 0) {
+        c += result1.rowsAffected[0]
+        const l = statements.length
+        for (let j = 1; j < l; j++) {
+          const request = new sql.Request(transaction)
+          setParameters(request, statements[j].params)
+          const result = await request.query(statements[j].query)
+          c += result.rowsAffected[0]
+        }
+      }
+      return c
+    } catch (err) {
+      buildError(err)
+      throw err
+    }
+  } else {
+    try {
+      for (const item of statements) {
+        const request = new sql.Request(transaction)
+        setParameters(request, item.params)
+        const result = await request.query(item.query)
+        c += result.rowsAffected[0]
+      }
+      return c
+    } catch (err) {
+      buildError(err)
       throw err
     }
   }
