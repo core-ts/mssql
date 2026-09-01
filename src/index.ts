@@ -78,7 +78,7 @@ export class SqlTransaction implements Tx {
     }
   }
   async rollback(): Promise<void> {
-    if (this.state !== "active") {
+    if (this.state !== "active" && this.state !== "unknown") {
       return
     }
     try {
