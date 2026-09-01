@@ -88,8 +88,6 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, pks?: A
     }
   }
   const colQuery0: string[] = []
-  const colQuery: string[] = []
-  const colSet: string[] = []
   let isUpdate = true
   let isVersion = false
   const o: any = obj
@@ -126,80 +124,6 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, pks?: A
           }
         }
         colQuery0.push(`${field}=${x}`)
-      }
-    }
-    for (const k of ks) {
-      let v = o[k]
-      if (v !== undefined) {
-        const attr = attrs[k]
-        if (attr && !attr.key && !attr.ignored && !attr.noupdate) {
-          const field = attr.column ? attr.column : k
-          let x: string
-          if (attr.version) {
-            ver = k
-            x = `${field} + 1`
-          } else {
-            if (v === null) {
-              x = "null"
-            } else if (v === "") {
-              x = `''`
-            } else if (typeof v === "number") {
-              x = toString(v)
-            } else {
-              x = buildParam(i++)
-              if (typeof v === "boolean") {
-                if (v === true) {
-                  const v2 = attr.true !== undefined ? attr.true : 1
-                  args.push(v2)
-                } else {
-                  const v2 = attr.false !== undefined ? attr.false : 0
-                  args.push(v2)
-                }
-              } else {
-                args.push(v)
-              }
-            }
-          }
-          colSet.push(`${field}=${x}`)
-        }
-      }
-    }
-    if ((ver && colSet.length > 1) || colSet.length > 0) {
-      for (const attr of pks) {
-        if (attr.name) {
-          const v = o[attr.name]
-          const field = attr.column ? attr.column : attr.name
-          let x: string
-          if (v === "") {
-            x = `''`
-          } else if (typeof v === "number") {
-            x = toString(v)
-          } else {
-            x = buildParam(i++)
-            if (typeof v === "boolean") {
-              if (v === true) {
-                const v2 = attr.true !== undefined ? attr.true : 1
-                args.push(v2)
-              } else {
-                const v2 = attr.false !== undefined ? attr.false : 0
-                args.push(v2)
-              }
-            } else {
-              args.push(v)
-            }
-          }
-          colQuery.push(`${field}=${x}`)
-        }
-      }
-      if (ver && ver.length > 0) {
-        const v = o[ver]
-        if (typeof v === "number" && !isNaN(v)) {
-          const attr = attrs[ver]
-          if (attr) {
-            const field = attr.column ? attr.column : ver
-            colQuery.push(`${field}=${v}`)
-          }
-        }
       }
     }
   }
@@ -258,12 +182,92 @@ export function buildToSave<T>(obj: T, table: string, attrs: Attributes, pks?: A
       return { query: q, params: args }
     }
   } else {
-    const field1 = pks[0].column ? pks[0].column : pks[0].name
-    const query = `if exists (select ${field1} from ${table} where ${colQuery0.join(" and ")})
-      update ${table} set ${colSet.join(",")} where ${colQuery.join(" and ")}
-      else
-      insert into ${table}(${cols.join(",")})values(${values.join(",")})`
-    return { query, params: args }
+    const colSet: string[] = []
+    let version: string | null = null
+    for (const k of ks) {
+      let v = o[k]
+      if (v !== undefined) {
+        const attr = attrs[k]
+        if (attr && !attr.key && !attr.ignored && !attr.noupdate) {
+          const field = attr.column ? attr.column : k
+          let x: string
+          if (attr.version) {
+            version = k
+            x = `${field} + 1`
+          } else {
+            if (v === null) {
+              x = "null"
+            } else if (v === "") {
+              x = `''`
+            } else if (typeof v === "number") {
+              x = toString(v)
+            } else {
+              x = buildParam(i++)
+              if (typeof v === "boolean") {
+                if (v === true) {
+                  const v2 = attr.true !== undefined ? attr.true : 1
+                  args.push(v2)
+                } else {
+                  const v2 = attr.false !== undefined ? attr.false : 0
+                  args.push(v2)
+                }
+              } else {
+                args.push(v)
+              }
+            }
+          }
+          colSet.push(`${field}=${x}`)
+        }
+      }
+    }
+    if (colSet.length === 0) {
+      return { query: "", params: args }
+    } else {
+      const colQuery: string[] = []
+      for (const attr of pks) {
+        if (attr.name) {
+          const v = o[attr.name]
+          const field = attr.column ? attr.column : attr.name
+          let x: string
+          if (v === "") {
+            x = `''`
+          } else if (typeof v === "number") {
+            x = toString(v)
+          } else {
+            x = buildParam(i++)
+            if (typeof v === "boolean") {
+              if (v === true) {
+                const v2 = attr.true !== undefined ? attr.true : 1
+                args.push(v2)
+              } else {
+                const v2 = attr.false !== undefined ? attr.false : 0
+                args.push(v2)
+              }
+            } else {
+              args.push(v)
+            }
+          }
+          colQuery.push(`${field}=${x}`)
+        }
+      }
+      if (version && version.length > 0) {
+        const v = o[version]
+        if (typeof v === "number" && !isNaN(v)) {
+          const attr = attrs[version]
+          if (attr) {
+            const field = attr.column ? attr.column : version
+            colQuery.push(`${field}=${v}`)
+          }
+        }
+      }
+
+      const field1 = pks[0].column ? pks[0].column : pks[0].name
+      const query = `if not exists (select ${field1} from ${table} where ${colQuery0.join(" and ")})
+  insert into ${table}(${cols.join(",")})values(${values.join(",")})
+  else
+  update ${table} set ${colSet.join(",")} where ${colQuery.join(" and ")}`
+      return { query, params: args }
+    }
   }
 }
 export function buildToSaveBatch<T>(objs: T[], table: string, attrs: Attributes, pks?: Attribute[], ver?: string, buildParam?: (i: number) => string): Statement[] {

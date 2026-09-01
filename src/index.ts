@@ -406,17 +406,7 @@ export function getMapField(name: string, mp?: StringMap): string {
 export function isEmpty(s: string): boolean {
   return !(s && s.length > 0)
 }
-export function version(attrs: Attributes): Attribute | undefined {
-  const ks = Object.keys(attrs as any)
-  for (const k of ks) {
-    const attr = attrs[k]
-    if (attr.version) {
-      attr.name = k
-      return attr
-    }
-  }
-  return undefined
-}
+
 // tslint:disable-next-line:max-classes-per-file
 export class SQLWriter<T> {
   protected keys: Attribute[]
@@ -605,8 +595,7 @@ export interface Formatter<T> {
 }
 export interface FileWriter {
   write(chunk: string): boolean
-  flush?(cb?: () => void): void
-  end?(cb?: () => void): void
+  end(cb?: () => void): void
 }
 // tslint:disable-next-line:max-classes-per-file
 export class Exporter<T> {
@@ -740,11 +729,7 @@ export class ExportService<T> {
     })
     return new Promise<number>((resolve, reject) => {
       request.on("done", (res) => {
-        if (this.writer.end) {
-          this.writer.end()
-        } else if (this.writer.flush) {
-          this.writer.flush()
-        }
+        this.writer.end()
         if (er) {
           reject(er)
         } else {
