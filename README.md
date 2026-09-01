@@ -1,5 +1,1079 @@
 # mssql-core
 
+A lightweight, SQL-first Microsoft SQL Server infrastructure library for Node.js and TypeScript.
+
+`mssql-core` provides a small database abstraction over [`mssql`](https://www.npmjs.com/package/mssql), with support for:
+
+* Connection pool execution
+* Transactions
+* Parameterized queries
+* Scalar and count queries
+* Result mapping
+* Boolean conversion
+* Metadata-driven insert/update operations
+* Optimistic version fields
+* Batch execution
+* Buffered batch writing
+* Reusable database abstractions through `Executor`, `DB`, and `Tx`
+
+It is designed for applications that want the control of SQL without introducing a full ORM.
+
+## Installation
+
+```bash
+npm install mssql-core mssql
+```
+
+## Philosophy
+
+`mssql-core` follows a simple principle:
+
+> Keep SQL explicit while centralizing database infrastructure.
+
+The library does not attempt to hide SQL behind entities, repositories, or a query DSL.
+
+Instead, it provides infrastructure around SQL:
+
+```text
+Application
+    │
+    ▼
+Executor / DB / Tx
+    │
+    ├── Query execution
+    ├── Transactions
+    ├── Parameter handling
+    ├── Result mapping
+    └── Batch execution
+    │
+    ▼
+mssql
+    │
+    ▼
+SQL Server
+```
+
+This makes it suitable for enterprise applications where SQL control, predictable performance, and explicit database behavior are important.
+
+---
+
+# Core Abstractions
+
+## Executor
+
+`Executor` is the common database execution interface.
+
+```ts
+export interface Executor {
+  driver: string
+  param(i: number): string
+
+  execute(sql: string, args?: any[]): Promise<number>
+
+  executeBatch(
+    statements: Statement[],
+    requireFirstAffected?: boolean,
+  ): Promise<number>
+
+  query<T>(
+    sql: string,
+    args?: any[],
+    m?: StringMap,
+    bools?: Attribute[],
+  ): Promise<T[]>
+
+  queryOne<T>(
+    sql: string,
+    args?: any[],
+    m?: StringMap,
+    bools?: Attribute[],
+  ): Promise<T | null>
+
+  executeScalar<T>(
+    sql: string,
+    args?: any[],
+  ): Promise<T | null>
+
+  count(
+    sql: string,
+    args?: any[],
+  ): Promise<number>
+}
+```
+
+Because both `PoolManager` and `SqlTransaction` implement `Executor`, application code can use the same interface whether it is running against a connection pool or inside a transaction.
+
+## DB
+
+`DB` extends `Executor` with transaction creation:
+
+```ts
+export interface DB extends Executor {
+  beginTransaction(): Promise<Tx>
+}
+```
+
+## Tx
+
+`Tx` extends `Executor` with transaction completion:
+
+```ts
+export interface Tx extends Executor {
+  commit(): Promise<void>
+  rollback(): Promise<void>
+}
+```
+
+---
+
+# Connection Pool
+
+`PoolManager` wraps an `mssql.ConnectionPool`.
+
+```ts
+import sql from "mssql"
+import { PoolManager } from "mssql-core"
+
+const pool = await sql.connect({
+  server: "localhost",
+  database: "app",
+  user: "sa",
+  password: "password",
+  options: {
+    encrypt: false,
+    trustServerCertificate: true,
+  },
+})
+
+const db = new PoolManager(pool)
+```
+
+You can now execute SQL through the `Executor` API.
+
+---
+
+# Query
+
+```ts
+const users = await db.query<User>(
+  `
+  select
+    USER_ID,
+    USER_NAME
+  from USERS
+  where ACTIVE = @p1
+  `,
+  [1],
+)
+```
+
+The values are bound as SQL parameters rather than interpolated directly into the SQL string.
+
+---
+
+# Query One
+
+```ts
+const user = await db.queryOne<User>(
+  `
+  select
+    USER_ID,
+    USER_NAME
+  from USERS
+  where USER_ID = @p1
+  `,
+  [100],
+)
+
+if (user) {
+  console.log(user.USER_NAME)
+}
+```
+
+`queryOne()` returns:
+
+```ts
+T | null
+```
+
+instead of an empty array.
+
+---
+
+# Execute
+
+```ts
+const affected = await db.execute(
+  `
+  update USERS
+  set ACTIVE = @p1
+  where USER_ID = @p2
+  `,
+  [1, 100],
+)
+
+console.log(affected)
+```
+
+The returned value is the number of affected rows reported by SQL Server.
+
+---
+
+# Execute Scalar
+
+```ts
+const total = await db.executeScalar<number>(
+  `
+  select count(*)
+  from USERS
+  `,
+)
+
+console.log(total)
+```
+
+`executeScalar()` returns the first column of the first returned row.
+
+---
+
+# Count
+
+For count queries, use the convenience method:
+
+```ts
+const total = await db.count(
+  `
+  select count(*)
+  from USERS
+  where ACTIVE = @p1
+  `,
+  [1],
+)
+```
+
+If the scalar result is `null`, `count()` returns `0`.
+
+---
+
+# Parameters
+
+The default MSSQL parameter format is:
+
+```ts
+import { param, params } from "mssql-core"
+
+param(1)
+// @p1
+
+params(3)
+// ["@p1", "@p2", "@p3"]
+
+params(3, 5)
+// ["@p6", "@p7", "@p8"]
+```
+
+A custom parameter builder can also be supplied to SQL generation functions and writers.
+
+---
+
+# Transactions
+
+Create a transaction from the database pool:
+
+```ts
+const tx = await db.beginTransaction()
+
+try {
+  await tx.execute(
+    `
+    update ACCOUNTS
+    set BALANCE = BALANCE - @p1
+    where ACCOUNT_ID = @p2
+    `,
+    [100, 1],
+  )
+
+  await tx.execute(
+    `
+    update ACCOUNTS
+    set BALANCE = BALANCE + @p1
+    where ACCOUNT_ID = @p2
+    `,
+    [100, 2],
+  )
+
+  await tx.commit()
+} catch (err) {
+  await tx.rollback()
+  throw err
+}
+```
+
+`SqlTransaction` prevents operations after a transaction has already been completed.
+
+It maintains an internal transaction state:
+
+```text
+active
+   │
+   ├── commit() ──────> committed
+   │
+   └── rollback() ────> rolledback
+```
+
+A failed commit can result in an `unknown` state because the client cannot always determine whether SQL Server committed the transaction before the connection failure.
+
+---
+
+# Result Mapping
+
+Database column names often differ from TypeScript property names.
+
+For example:
+
+```text
+USER_ID
+USER_NAME
+CREATED_AT
+```
+
+can be mapped to:
+
+```ts
+{
+  userId: ...,
+  userName: ...,
+  createdAt: ...
+}
+```
+
+A mapping can be supplied to `query()`:
+
+```ts
+const users = await db.query<User>(
+  `
+  select
+    USER_ID,
+    USER_NAME
+  from USERS
+  `,
+  [],
+  {
+    user_id: "userId",
+    user_name: "userName",
+  },
+)
+```
+
+Unmapped fields are preserved.
+
+The library also exposes:
+
+```ts
+map()
+mapArray()
+```
+
+for direct mapping.
+
+---
+
+# Boolean Mapping
+
+SQL Server applications frequently represent booleans using values such as:
+
+```text
+1 / 0
+Y / N
+T / F
+ON / OFF
+```
+
+`mssql-core` supports metadata-driven boolean conversion.
+
+```ts
+const bools: Attribute[] = [
+  {
+    name: "active",
+    type: "boolean",
+    true: 1,
+  },
+]
+```
+
+A value of `1` is converted to:
+
+```ts
+true
+```
+
+when returned from the database.
+
+Without an explicit `true` value, common true representations such as `1`, `T`, `Y`, and `ON` are recognized.
+
+---
+
+# Metadata
+
+The library provides a lightweight metadata model:
+
+```ts
+export interface Attribute {
+  name?: string
+  column?: string
+  type?: DataType
+  default?: string | number | Date | boolean
+  key?: boolean
+  noinsert?: boolean
+  noupdate?: boolean
+  version?: boolean
+  ignored?: boolean
+  true?: string | number
+  false?: string | number
+}
+```
+
+Attributes are defined as:
+
+```ts
+const attributes: Attributes = {
+  id: {
+    column: "USER_ID",
+    key: true,
+    type: "integer",
+  },
+
+  name: {
+    column: "USER_NAME",
+    type: "string",
+  },
+
+  active: {
+    column: "ACTIVE",
+    type: "boolean",
+    true: 1,
+    false: 0,
+  },
+
+  version: {
+    column: "VERSION",
+    type: "integer",
+    version: true,
+  },
+}
+```
+
+Metadata can be inspected using:
+
+```ts
+const m = metadata(attributes)
+
+console.log(m.keys)
+console.log(m.bools)
+console.log(m.version)
+console.log(m.fields)
+```
+
+---
+
+# Data Types
+
+The metadata model supports:
+
+```ts
+type DataType =
+  | "ObjectId"
+  | "date"
+  | "datetime"
+  | "time"
+  | "boolean"
+  | "number"
+  | "integer"
+  | "string"
+  | "text"
+  | "object"
+  | "array"
+  | "binary"
+  | "primitives"
+  | "booleans"
+  | "numbers"
+  | "integers"
+  | "strings"
+  | "dates"
+  | "datetimes"
+  | "times"
+```
+
+The type metadata primarily describes application/database fields and is used by higher-level persistence functionality.
+
+---
+
+# Build Insert / Update Statements
+
+`buildToSave()` generates an `INSERT` or `UPDATE` statement from an object and its metadata.
+
+```ts
+const user = {
+  id: 100,
+  name: "John",
+  active: true,
+}
+
+const statement = buildToSave(
+  user,
+  "USERS",
+  attributes,
+)
+
+console.log(statement.query)
+console.log(statement.params)
+```
+
+The generated statement contains parameter placeholders such as:
+
+```sql
+@p1
+@p2
+@p3
+```
+
+while the actual values are returned separately through:
+
+```ts
+statement.params
+```
+
+This keeps data values parameterized.
+
+---
+
+# Insert / Update Behavior
+
+Primary keys determine whether the object is treated as an insert or an update.
+
+Conceptually:
+
+```text
+Primary key values missing
+        │
+        ▼
+      INSERT
+
+Primary key values present
+        │
+        ▼
+      UPDATE
+```
+
+For example:
+
+```ts
+{
+  id: null,
+  name: "John",
+}
+```
+
+is treated as an insert.
+
+While:
+
+```ts
+{
+  id: 100,
+  name: "John",
+}
+```
+
+is treated as an update.
+
+Composite keys are supported.
+
+---
+
+# Attribute Options
+
+## `key`
+
+Marks a field as part of the primary-key condition.
+
+```ts
+id: {
+  key: true,
+}
+```
+
+## `column`
+
+Maps a TypeScript property to a database column.
+
+```ts
+userId: {
+  column: "USER_ID",
+}
+```
+
+## `ignored`
+
+Prevents a field from being persisted.
+
+```ts
+password: {
+  ignored: true,
+}
+```
+
+## `noinsert`
+
+Prevents a field from being included in an `INSERT`.
+
+```ts
+createdAt: {
+  noinsert: true,
+}
+```
+
+## `noupdate`
+
+Prevents a field from being included in an `UPDATE`.
+
+```ts
+createdAt: {
+  noupdate: true,
+}
+```
+
+## `default`
+
+Provides a value when the object field is `null` or `undefined`.
+
+```ts
+active: {
+  default: 1,
+}
+```
+
+## `version`
+
+Marks a field as an optimistic version field.
+
+```ts
+version: {
+  version: true,
+}
+```
+
+---
+
+# Optimistic Versioning
+
+A version field can be used for optimistic concurrency control.
+
+Example metadata:
+
+```ts
+const attributes: Attributes = {
+  id: {
+    column: "USER_ID",
+    key: true,
+  },
+
+  name: {
+    column: "USER_NAME",
+  },
+
+  version: {
+    column: "VERSION",
+    version: true,
+  },
+}
+```
+
+During an update, the generated SQL increments the version:
+
+```sql
+VERSION = VERSION + 1
+```
+
+and can include the expected version in the update condition.
+
+This allows applications to detect concurrent modifications using the affected-row count.
+
+---
+
+# Batch Operations
+
+A `Statement` is represented by:
+
+```ts
+export interface Statement {
+  query: string
+  params?: any[]
+}
+```
+
+Build a batch:
+
+```ts
+const statements = buildToSaveBatch(
+  users,
+  "USERS",
+  attributes,
+)
+```
+
+Then execute:
+
+```ts
+const affected = await db.executeBatch(statements)
+```
+
+Multiple statements are executed in a transaction.
+
+A single statement is executed directly without creating an additional explicit transaction.
+
+---
+
+# Conditional Batch Execution
+
+`executeBatch()` supports:
+
+```ts
+requireFirstAffected
+```
+
+When enabled, subsequent statements are executed only when the first statement affects at least one row.
+
+```ts
+await db.executeBatch(
+  statements,
+  true,
+)
+```
+
+This is useful for workflows such as:
+
+```text
+First operation
+     │
+     ├── affected rows > 0 → execute remaining operations
+     │
+     └── affected rows = 0 → stop
+```
+
+---
+
+# SQLWriter
+
+`SQLWriter<T>` provides a reusable object-to-database writer.
+
+```ts
+const writer = new SQLWriter<User>(
+  pool,
+  "USERS",
+  attributes,
+)
+
+const affected = await writer.write({
+  id: 100,
+  name: "John",
+  active: true,
+})
+```
+
+`SQLWriter` combines:
+
+```text
+Object
+  ↓
+Metadata
+  ↓
+buildToSave()
+  ↓
+SQL execution
+```
+
+An optional mapping function can transform the application object before persistence:
+
+```ts
+const writer = new SQLWriter<User>(
+  pool,
+  "USERS",
+  attributes,
+  false,
+  (user) => ({
+    ...user,
+    name: user.name.trim(),
+  }),
+)
+```
+
+---
+
+# BatchWriter
+
+`BatchWriter<T>` writes multiple objects in one batch.
+
+```ts
+const writer = new BatchWriter<User>(
+  pool,
+  "USERS",
+  attributes,
+)
+
+const affected = await writer.write(users)
+```
+
+The objects are converted into statements using:
+
+```ts
+buildToSaveBatch()
+```
+
+and then executed through:
+
+```ts
+executeBatch()
+```
+
+---
+
+# BufferedBatchWriter
+
+`BufferedBatchWriter<T>` is designed for streaming and high-volume workloads.
+
+```ts
+const writer = new BufferedBatchWriter<User>(
+  pool,
+  "USERS",
+  attributes,
+  5000,
+)
+
+for (const user of users) {
+  await writer.write(user)
+}
+
+await writer.flush()
+```
+
+Objects are buffered until the configured batch size is reached.
+
+```text
+write()
+write()
+write()
+...
+write()
+  │
+  ▼
+batch size reached
+  │
+  ▼
+flush()
+  │
+  ▼
+executeBatch()
+```
+
+This is useful for:
+
+* CSV imports
+* ETL
+* Data migration
+* Synchronization jobs
+* Large back-office processing jobs
+
+---
+
+# Duplicate Key Detection
+
+Database errors are normalized for duplicate primary-key violations.
+
+When SQL Server reports a primary-key violation, the error may be marked with:
+
+```ts
+err.error = "duplicate"
+```
+
+This allows higher-level application code to distinguish duplicate-record failures from other database errors.
+
+---
+
+# Utility Functions
+
+The package also provides several low-level utilities:
+
+```ts
+param()
+params()
+toString()
+toArray()
+map()
+mapArray()
+metadata()
+handleResults()
+handleBool()
+```
+
+These functions can be used independently when building custom persistence components.
+
+---
+
+# Complete Example
+
+```ts
+import sql from "mssql"
+import {
+  Attributes,
+  PoolManager,
+  SQLWriter,
+} from "mssql-core"
+
+interface User {
+  id?: number
+  name: string
+  active: boolean
+  version?: number
+}
+
+const attributes: Attributes = {
+  id: {
+    column: "USER_ID",
+    key: true,
+    type: "integer",
+  },
+
+  name: {
+    column: "USER_NAME",
+    type: "string",
+  },
+
+  active: {
+    column: "ACTIVE",
+    type: "boolean",
+    true: 1,
+    false: 0,
+  },
+
+  version: {
+    column: "VERSION",
+    type: "integer",
+    version: true,
+  },
+}
+
+async function main() {
+  const pool = await sql.connect({
+    server: "localhost",
+    database: "app",
+    user: "sa",
+    password: "password",
+    options: {
+      encrypt: false,
+      trustServerCertificate: true,
+    },
+  })
+
+  const db = new PoolManager(pool)
+
+  const users = await db.query<User>(
+    `
+    select
+      USER_ID as id,
+      USER_NAME as name,
+      ACTIVE as active,
+      VERSION as version
+    from USERS
+    `,
+  )
+
+  console.log(users)
+
+  const writer = new SQLWriter<User>(
+    pool,
+    "USERS",
+    attributes,
+  )
+
+  await writer.write({
+    id: 100,
+    name: "John",
+    active: true,
+    version: 1,
+  })
+}
+
+main().catch(console.error)
+```
+
+---
+
+# When to Use mssql-core
+
+`mssql-core` is a good fit when you want:
+
+* Direct SQL control
+* A small and predictable database API
+* Reusable transaction abstractions
+* Parameterized query execution
+* Metadata-driven persistence
+* Batch and buffered processing
+* Enterprise-oriented database infrastructure
+* A lightweight alternative to a full ORM
+
+It is particularly useful in applications with a strong service/repository architecture where SQL remains part of the infrastructure layer.
+
+# When Not to Use It
+
+`mssql-core` is not intended to replace a full ORM when your application requires features such as:
+
+* Automatic relationship management
+* Complex entity graphs
+* Change tracking
+* Schema migrations
+* A fully abstracted query language
+* Automatic lazy/eager loading
+
+The library intentionally keeps SQL close to the application.
+
+---
+
+# Design
+
+The library is based on a few simple abstractions:
+
+```text
+Executor
+   │
+   ├── PoolManager
+   │
+   └── SqlTransaction
+
+Metadata
+   │
+   ├── Attribute
+   ├── metadata()
+   ├── buildToSave()
+   └── buildToSaveBatch()
+
+Writers
+   │
+   ├── SQLWriter
+   ├── BatchWriter
+   └── BufferedBatchWriter
+```
+
+This separation allows applications to use only the level of abstraction they need.
+
+---
+
+# License
+
+MIT
+
+# mssql-core
+
 A lightweight TypeScript database core for Microsoft SQL Server, built on top of the [`mssql`](https://www.npmjs.com/package/mssql) driver.
 
 `mssql-core` provides a small and reusable database abstraction for SQL execution, transactions, parameter binding, result mapping, boolean conversion, and common query helpers. It is designed to serve as a **database core layer**, not as an ORM.
