@@ -9,6 +9,7 @@ export * from "./metadata"
 export class PoolManager implements DB {
   constructor(protected pool: sql.ConnectionPool) {
     this.param = this.param.bind(this)
+    this.beginTransaction = this.beginTransaction.bind(this)
     this.execute = this.execute.bind(this)
     this.executeBatch = this.executeBatch.bind(this)
     this.query = this.query.bind(this)
@@ -18,8 +19,9 @@ export class PoolManager implements DB {
   }
   beginTransaction(): Promise<Tx> {
     const transaction = new sql.Transaction(this.pool)
-    const tx = new SqlTransaction(transaction)
-    return Promise.resolve(tx)
+    return transaction.begin().then(() => {
+      return new SqlTransaction(transaction)
+    })
   }
   driver = "mssql"
   param(i: number): string {
@@ -45,6 +47,7 @@ export class PoolManager implements DB {
   }
 }
 export class SqlTransaction implements Tx {
+  private state: "active" | "committed" | "rolledback" = "active"
   constructor(protected tx: sql.Transaction) {
     this.param = this.param.bind(this)
     this.execute = this.execute.bind(this)
@@ -53,12 +56,35 @@ export class SqlTransaction implements Tx {
     this.queryOne = this.queryOne.bind(this)
     this.executeScalar = this.executeScalar.bind(this)
     this.count = this.count.bind(this)
+    this.commit = this.commit.bind(this)
+    this.rollback = this.rollback.bind(this)
+    this.ensureActive = this.ensureActive.bind(this)
   }
-  commit(): Promise<void> {
-    return this.tx.commit()
+  private ensureActive(): void {
+    if (this.state !== "active") {
+      throw new Error(`Transaction is already ${this.state}`)
+    }
   }
-  rollback(): Promise<void> {
-    return this.tx.rollback()
+  async commit(): Promise<void> {
+    this.ensureActive()
+    try {
+      await this.tx.commit()
+      this.state = "committed"
+    } catch (err) {
+      // State is intentionally not changed here because commit outcome
+      // may be unknown to the client.
+      throw err
+    }
+  }
+  async rollback(): Promise<void> {
+    if (this.state !== "active") {
+      return
+    }
+    try {
+      await this.tx.rollback()
+      this.state = "rolledback"
+    } catch (err) {
+    }
   }
   driver = "mssql"
   param(i: number): string {
@@ -95,8 +121,6 @@ export async function executeBatch(pool: sql.ConnectionPool, statements: Stateme
 export async function executeBatchWithTx(transaction: sql.Transaction, statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
-  } else if (statements.length === 1) {
-    return execute(transaction, statements[0].query, statements[0].params)
   }
   let c = 0
   if (requireFirstAffected) {
@@ -106,14 +130,16 @@ export async function executeBatchWithTx(transaction: sql.Transaction, statement
       const request0 = new sql.Request(transaction)
       setParameters(request0, query0.params)
       const result1 = await request0.query(query0.query)
-      if (result1 && result1.rowsAffected[0] !== 0) {
+      if (result1 && result1.rowsAffected[0] > 0) {
         c += result1.rowsAffected[0]
         const l = statements.length
         for (let j = 1; j < l; j++) {
           const request = new sql.Request(transaction)
           setParameters(request, statements[j].params)
           const result = await request.query(statements[j].query)
-          c += result.rowsAffected[0]
+          if (result && result.rowsAffected[0] > 0) {
+            c += result.rowsAffected[0]
+          }
         }
       }
       await transaction.commit()
@@ -134,7 +160,9 @@ export async function executeBatchWithTx(transaction: sql.Transaction, statement
         const request = new sql.Request(transaction)
         setParameters(request, item.params)
         const result = await request.query(item.query)
-        c += result.rowsAffected[0]
+        if (result && result.rowsAffected[0] > 0) {
+          c += result.rowsAffected[0]
+        }
       }
       await transaction.commit()
       return c
@@ -162,14 +190,16 @@ export async function executeBatchTx(transaction: sql.Transaction, statements: S
       const request0 = new sql.Request(transaction)
       setParameters(request0, query0.params)
       const result1 = await request0.query(query0.query)
-      if (result1 && result1.rowsAffected[0] !== 0) {
+      if (result1 && result1.rowsAffected[0] > 0) {
         c += result1.rowsAffected[0]
         const l = statements.length
         for (let j = 1; j < l; j++) {
           const request = new sql.Request(transaction)
           setParameters(request, statements[j].params)
           const result = await request.query(statements[j].query)
-          c += result.rowsAffected[0]
+          if (result && result.rowsAffected[0] > 0) {
+            c += result.rowsAffected[0]
+          }
         }
       }
       return c
@@ -183,7 +213,9 @@ export async function executeBatchTx(transaction: sql.Transaction, statements: S
         const request = new sql.Request(transaction)
         setParameters(request, item.params)
         const result = await request.query(item.query)
-        c += result.rowsAffected[0]
+        if (result && result.rowsAffected[0] > 0) {
+          c += result.rowsAffected[0]
+        }
       }
       return c
     } catch (err) {
@@ -221,18 +253,14 @@ export function query<T>(db: sql.ConnectionPool | sql.Transaction, q: string, ar
   })
 }
 
-export function queryOne<T>(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T> {
-  return query<T[]>(db, q, args, m, bools)
-    .then((results) => {
-      if (results && results.length > 0) {
-        return results[0] as any
-      } else {
-        return null
-      }
-    })
-    .catch((err) => {
-      throw err
-    })
+export function queryOne<T>(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[], m?: StringMap, bools?: Attribute[]): Promise<T | null> {
+  return query<T>(db, q, args, m, bools).then((results) => {
+    if (results && results.length > 0) {
+      return results[0]
+    } else {
+      return null
+    }
+  })
 }
 export function executeScalar<T>(db: sql.ConnectionPool | sql.Transaction, q: string, args?: any[]): Promise<T | null> {
   return queryOne<T>(db, q, args).then((r) => {
@@ -372,22 +400,19 @@ export function mapArray<T>(results: T[], m?: StringMap): T[] {
   if (!m) {
     return results
   }
-  const mkeys = Object.keys(m as any)
+  const mkeys = Object.keys(m)
   if (mkeys.length === 0) {
     return results
   }
   const objs = []
   const length = results.length
   for (let i = 0; i < length; i++) {
-    const obj = results[i]
+    const obj: any = results[i]
     const obj2: any = {}
-    const keys = Object.keys(obj as any)
+    const keys = Object.keys(obj)
     for (const key of keys) {
-      let k0 = m[key]
-      if (!k0) {
-        k0 = key
-      }
-      obj2[k0] = (obj as any)[key]
+      const k0 = m[key] !== undefined ? m[key] : key
+      obj2[k0] = obj[key]
     }
     objs.push(obj2)
   }
