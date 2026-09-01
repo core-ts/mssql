@@ -29,9 +29,9 @@ export class PoolManager implements DB {
     const p = ctx ? ctx : this.pool
     return execute(p, q, args)
   }
-  executeBatch(statements: Statement[], firstAffected?: boolean, ctx?: any): Promise<number> {
+  executeBatch(statements: Statement[], requireFirstAffected?: boolean, ctx?: any): Promise<number> {
     const p = ctx ? ctx : this.pool
-    return executeBatch(p, statements, firstAffected)
+    return executeBatch(p, statements, requireFirstAffected)
   }
   query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
     const p = ctx ? ctx : this.pool
@@ -74,9 +74,9 @@ export class SqlTransaction implements Tx {
     const p = ctx ? ctx : this.tx
     return execute(p, q, args)
   }
-  executeBatch(statements: Statement[], firstAffected?: boolean, ctx?: any): Promise<number> {
+  executeBatch(statements: Statement[], requireFirstAffected?: boolean, ctx?: any): Promise<number> {
     const p = ctx ? ctx : this.tx
-    return executeBatch(p, statements, firstAffected)
+    return executeBatch(p, statements, requireFirstAffected)
   }
   query<T>(q: string, args?: any[], m?: StringMap, fields?: Attribute[], ctx?: any): Promise<T[]> {
     const p = ctx ? ctx : this.tx
@@ -95,23 +95,23 @@ export class SqlTransaction implements Tx {
     return count(p, q, args)
   }
 }
-export async function executeBatch(pool: sql.ConnectionPool, statements: Statement[], firstAffected?: boolean): Promise<number> {
+export async function executeBatch(pool: sql.ConnectionPool, statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
   } else if (statements.length === 1) {
     return execute(pool, statements[0].query, statements[0].params)
   }
   const transaction = new sql.Transaction(pool)
-  return executeBatchTx(transaction, statements, firstAffected)
+  return executeBatchTx(transaction, statements, requireFirstAffected)
 }
-export async function executeBatchTx(transaction: sql.Transaction, statements: Statement[], firstAffected?: boolean): Promise<number> {
+export async function executeBatchTx(transaction: sql.Transaction, statements: Statement[], requireFirstAffected?: boolean): Promise<number> {
   if (!statements || statements.length === 0) {
     return Promise.resolve(0)
   } else if (statements.length === 1) {
     return execute(transaction, statements[0].query, statements[0].params)
   }
   let c = 0
-  if (firstAffected) {
+  if (requireFirstAffected) {
     try {
       const query0 = statements[0]
       const queries = statements.slice(1)

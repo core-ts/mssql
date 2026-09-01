@@ -189,7 +189,7 @@ For an empty batch, the function returns `0`. For a single statement, it directl
 
 ## Conditional Batch Execution
 
-`executeBatch()` supports the `firstAffected` option:
+`executeBatch()` supports the `requireFirstAffected` option:
 
 ```typescript
 await db.executeBatch(
@@ -214,7 +214,7 @@ await db.executeBatch(
 )
 ```
 
-When `firstAffected` is enabled, the first statement is executed first. The remaining statements are executed only when the first statement reports affected rows.
+When `requireFirstAffected` is enabled, the first statement is executed first. The remaining statements are executed only when the first statement reports affected rows.
 
 ## Transactions
 
@@ -1031,16 +1031,16 @@ const writer = new SQLWriter<User>(
 )
 ```
 
-## SQLBatchWriter
+## BatchWriter
 
-`SQLBatchWriter<T>` accepts an array and executes the generated statements as a batch.
+`BatchWriter<T>` accepts an array and executes the generated statements as a batch.
 
 ```typescript
 import {
-  SQLBatchWriter
+  BatchWriter
 } from "mssql-core"
 
-const writer = new SQLBatchWriter<User>(
+const writer = new BatchWriter<User>(
   pool,
   "users",
   attributes
@@ -1052,7 +1052,7 @@ await writer.write(users)
 A mapping function can also be supplied.
 
 ```typescript
-const writer = new SQLBatchWriter<User>(
+const writer = new BatchWriter<User>(
   pool,
   "users",
   attributes,
@@ -1064,16 +1064,16 @@ const writer = new SQLBatchWriter<User>(
 )
 ```
 
-## SQLStreamWriter
+## BufferedBatchWriter
 
-`SQLStreamWriter<T>` buffers objects and automatically flushes when the buffer reaches the configured size.
+`BufferedBatchWriter<T>` buffers objects and automatically flushes when the buffer reaches the configured size.
 
 ```typescript
 import {
-  SQLStreamWriter
+  BufferedBatchWriter
 } from "mssql-core"
 
-const writer = new SQLStreamWriter<User>(
+const writer = new BufferedBatchWriter<User>(
   pool,
   "users",
   attributes,
@@ -1246,7 +1246,7 @@ The higher-level writers reuse the same core:
                               │
              ┌────────────────┼────────────────┐
              │                │                │
-        SQLWriter      SQLBatchWriter    SQLStreamWriter
+        SQLWriter      BatchWriter    BufferedBatchWriter
              │                │                │
              └────────────────┼────────────────┘
                               ▼
@@ -1273,8 +1273,8 @@ The higher-level writers reuse the same core:
 | `param()`            | Build a SQL parameter name                    |
 | `version()`          | Find a version attribute                      |
 | `SQLWriter`          | Write individual objects                      |
-| `SQLBatchWriter`     | Write object arrays                           |
-| `SQLStreamWriter`    | Buffer and write objects in batches           |
+| `BatchWriter`     | Write object arrays                           |
+| `BufferedBatchWriter`    | Buffer and write objects in batches           |
 | `resource`           | Global behavior configuration                 |
 
 ## Design
@@ -1671,7 +1671,7 @@ Designed for:
 
 Need to process millions of records?
 
-`SQLStreamWriter` processes data one object at a time.
+`BufferedBatchWriter` processes data one object at a time.
 
 Benefits:
 
