@@ -64,7 +64,7 @@ This makes it suitable for enterprise applications where SQL control, predictabl
 `Executor` is the common database execution interface.
 
 ```ts
-export interface Executor {
+interface Executor {
   driver: string
   param(i: number): string
 
@@ -78,14 +78,14 @@ export interface Executor {
   query<T>(
     sql: string,
     args?: any[],
-    m?: StringMap,
+    map?: StringMap,
     bools?: Attribute[],
   ): Promise<T[]>
 
   queryOne<T>(
     sql: string,
     args?: any[],
-    m?: StringMap,
+    map?: StringMap,
     bools?: Attribute[],
   ): Promise<T | null>
 
@@ -108,7 +108,7 @@ Because both `PoolManager` and `SqlTransaction` implement `Executor`, applicatio
 `DB` extends `Executor` with transaction creation:
 
 ```ts
-export interface DB extends Executor {
+interface DB extends Executor {
   beginTransaction(): Promise<Tx>
 }
 ```
@@ -118,7 +118,7 @@ export interface DB extends Executor {
 `Tx` extends `Executor` with transaction completion:
 
 ```ts
-export interface Tx extends Executor {
+interface Tx extends Executor {
   commit(): Promise<void>
   rollback(): Promise<void>
 }
@@ -146,6 +146,18 @@ const pool = await sql.connect({
 })
 
 const db = new PoolManager(pool)
+
+const users = await db.query<User>(
+  "select id, name, status from users where status = @p1",
+  ["ACTIVE"]
+)
+
+const affectedRows = await db.execute(
+  {
+    query: "update users set status = @p1 where id = @p2",
+    params: ["ACTIVE", 100]
+  }
+)
 ```
 
 You can now execute SQL through the `Executor` API.
@@ -156,13 +168,7 @@ You can now execute SQL through the `Executor` API.
 
 ```ts
 const users = await db.query<User>(
-  `
-  select
-    USER_ID,
-    USER_NAME
-  from USERS
-  where ACTIVE = @p1
-  `,
+  "select USER_ID, USER_NAME from USERS where ACTIVE = @p1",
   [1],
 )
 ```
@@ -175,13 +181,7 @@ The values are bound as SQL parameters rather than interpolated directly into th
 
 ```ts
 const user = await db.queryOne<User>(
-  `
-  select
-    USER_ID,
-    USER_NAME
-  from USERS
-  where USER_ID = @p1
-  `,
+  "select USER_ID, USER_NAME from USERS where USER_ID = @p1",
   [100],
 )
 
@@ -204,11 +204,7 @@ instead of an empty array.
 
 ```ts
 const affected = await db.execute(
-  `
-  update USERS
-  set ACTIVE = @p1
-  where USER_ID = @p2
-  `,
+  "update USERS set ACTIVE = @p1 where USER_ID = @p2",
   [1, 100],
 )
 
@@ -223,10 +219,7 @@ The returned value is the number of affected rows reported by SQL Server.
 
 ```ts
 const total = await db.executeScalar<number>(
-  `
-  select count(*)
-  from USERS
-  `,
+  "select count(*) from USERS",
 )
 
 console.log(total)
@@ -242,11 +235,7 @@ For count queries, use the convenience method:
 
 ```ts
 const total = await db.count(
-  `
-  select count(*)
-  from USERS
-  where ACTIVE = @p1
-  `,
+  "select count(*) from USERS where ACTIVE = @p1",
   [1],
 )
 ```
@@ -285,23 +274,13 @@ const tx = await db.beginTransaction()
 
 try {
   await tx.execute(
-    `
-    update ACCOUNTS
-    set BALANCE = BALANCE - @p1
-    where ACCOUNT_ID = @p2
-    `,
+    "update ACCOUNTS set BALANCE = BALANCE - @p1 where ACCOUNT_ID = @p2",
     [100, 1],
   )
-
   await tx.execute(
-    `
-    update ACCOUNTS
-    set BALANCE = BALANCE + @p1
-    where ACCOUNT_ID = @p2
-    `,
+    "update ACCOUNTS set BALANCE = BALANCE + @p1 where ACCOUNT_ID = @p2",
     [100, 2],
   )
-
   await tx.commit()
 } catch (err) {
   await tx.rollback()
@@ -341,9 +320,9 @@ can be mapped to:
 
 ```ts
 {
-  userId: ...,
-  userName: ...,
-  createdAt: ...
+  userId: "...",
+  userName: "...",
+  createdAt: "..."
 }
 ```
 
@@ -351,12 +330,7 @@ A mapping can be supplied to `query()`:
 
 ```ts
 const users = await db.query<User>(
-  `
-  select
-    USER_ID,
-    USER_NAME
-  from USERS
-  `,
+  "select USER_ID, USER_NAME from USERS",
   [],
   {
     user_id: "userId",
@@ -784,12 +758,12 @@ const affected = await writer.write({
 `SQLWriter` combines:
 
 ```text
-Object
-  ↓
-Metadata
-  ↓
+   Object
+     ↓
+  Metadata
+     ↓
 buildToSave()
-  ↓
+     ↓
 SQL execution
 ```
 
@@ -924,11 +898,7 @@ These functions can be used independently when building custom persistence compo
 
 ```ts
 import sql from "mssql"
-import {
-  Attributes,
-  PoolManager,
-  SQLWriter,
-} from "mssql-core"
+import { Attributes, PoolManager, SQLWriter } from "mssql-core"
 
 interface User {
   id?: number
@@ -943,19 +913,16 @@ const attributes: Attributes = {
     key: true,
     type: "integer",
   },
-
   name: {
     column: "USER_NAME",
     type: "string",
   },
-
   active: {
     column: "ACTIVE",
     type: "boolean",
     true: 1,
     false: 0,
   },
-
   version: {
     column: "VERSION",
     type: "integer",
@@ -976,7 +943,6 @@ async function main() {
   })
 
   const db = new PoolManager(pool)
-
   const users = await db.query<User>(
     `
     select
@@ -1148,11 +1114,7 @@ const db = new PoolManager(pool)
 
 ```typescript
 const users = await db.query<User>(
-  `
-  SELECT id, name, email
-  FROM users
-  WHERE status = @1
-  `,
+  "SELECT id, name, email FROM users WHERE status = @1",
   ["ACTIVE"]
 )
 ```
@@ -1170,11 +1132,7 @@ Use `queryOne()` when only the first row is required:
 
 ```typescript
 const user = await db.queryOne<User>(
-  `
-  SELECT id, name, email
-  FROM users
-  WHERE id = @1
-  `,
+  "SELECT id, name, email FROM users WHERE id = @1",
   [100]
 )
 
@@ -1191,11 +1149,7 @@ Use `execute()` for `INSERT`, `UPDATE`, `DELETE`, or other statements where the 
 
 ```typescript
 const affected = await db.execute(
-  `
-  UPDATE users
-  SET status = @1
-  WHERE id = @2
-  `,
+  "UPDATE users SET status = @1 WHERE id = @2",
   ["ACTIVE", 100]
 )
 ```
@@ -1208,10 +1162,7 @@ The returned value is the first `rowsAffected` value reported by `mssql`.
 
 ```typescript
 const total = await db.executeScalar<number>(
-  `
-  SELECT COUNT(*) AS total
-  FROM users
-  `
+  "SELECT COUNT(*) AS total FROM users"
 )
 ```
 
@@ -1223,10 +1174,7 @@ It returns `null` when no row is returned.
 
 ```typescript
 const total = await db.count(
-  `
-  SELECT COUNT(*) AS total
-  FROM users
-  `
+  "SELECT COUNT(*) AS total FROM users"
 )
 ```
 
@@ -1239,19 +1187,11 @@ When the scalar result is `null`, `count()` returns `0`.
 ```typescript
 const affected = await db.executeBatch([
   {
-    query: `
-      UPDATE users
-      SET status = @1
-      WHERE id = @2
-    `,
+    query: "UPDATE users SET status = @1 WHERE id = @2",
     params: ["ACTIVE", 1]
   },
   {
-    query: `
-      UPDATE users
-      SET status = @1
-      WHERE id = @2
-    `,
+    query: "UPDATE users SET status = @1 WHERE id = @2",
     params: ["ACTIVE", 2]
   }
 ])
@@ -1269,18 +1209,11 @@ For an empty batch, the function returns `0`. For a single statement, it directl
 await db.executeBatch(
   [
     {
-      query: `
-        UPDATE users
-        SET status = @1
-        WHERE id = @2
-      `,
+      query: "UPDATE users SET status = @1 WHERE id = @2",
       params: ["ACTIVE", 100]
     },
     {
-      query: `
-        INSERT INTO user_logs(user_id, action)
-        VALUES (@1, @2)
-      `,
+      query: "INSERT INTO user_logs(user_id, action) VALUES (@1, @2)",
       params: [100, "ACTIVATE"]
     }
   ],
@@ -1317,12 +1250,7 @@ Parameters are passed as an array:
 
 ```typescript
 await db.query(
-  `
-  SELECT *
-  FROM users
-  WHERE id = @1
-    AND status = @2
-  `,
+  "SELECT * FROM users WHERE id = @1 AND status = @2",
   [100, "ACTIVE"]
 )
 ```
@@ -1356,10 +1284,7 @@ const document = {
 }
 
 await db.execute(
-  `
-  INSERT INTO documents(data)
-  VALUES (@1)
-  `,
+  "INSERT INTO documents(data) VALUES (@1)",
   [document]
 )
 ```
@@ -1372,13 +1297,7 @@ Query results can be mapped from database column names to application property n
 
 ```typescript
 const users = await db.query<User>(
-  `
-  SELECT
-    user_id,
-    first_name,
-    last_name
-  FROM users
-  `,
+  "SELECT user_id, first_name, last_name FROM users",
   [],
   {
     user_id: "id",
@@ -1416,10 +1335,7 @@ SQL Server applications may represent boolean values as numbers or strings. `mss
 
 ```typescript
 const users = await db.query<User>(
-  `
-  SELECT id, enabled
-  FROM users
-  `,
+  "SELECT id, enabled FROM users",
   [],
   undefined,
   [
@@ -1461,47 +1377,85 @@ or:
 
 `Attribute.true` accepts both strings and numbers.
 
-## Field Selection Utilities
-
-The library includes helpers for dynamically selecting fields.
+## Dynamic SQL Field Helpers
 
 ### `getFields()`
 
-```typescript
+`getFields()` optionally filters a requested field list against an allowed list.
+
+```ts
 const fields = getFields(
   ["id", "name", "invalid"],
   ["id", "name", "email"]
 )
 ```
 
-When `all` is supplied, only fields contained in that list are returned. If there are no valid fields, `undefined` is returned.
+The resulting fields are:
+```text
+id
+name
+```
 
 ### `buildFields()`
 
-```typescript
-const fields = buildFields(
-  ["id", "name"],
+`buildFields()` produces a comma-separated SQL field list.
+
+```ts
+const sqlFields = buildFields(
+  ["id", "name", "invalid"],
   ["id", "name", "email"]
 )
-
-// "id,name"
 ```
 
-When no fields are available, `buildFields()` returns:
+Result:
+
+```text
+id,name
+```
+
+When no valid fields are available, `buildFields()` returns:
 
 ```text
 *
 ```
 
-These helpers are intended for SQL construction. Field names should be validated by the caller before being inserted into SQL.
+Dynamic field names should still come from trusted or validated input because SQL parameters cannot be used for identifiers.
+
+```ts
+SELECT ${buildFields(fields, allowedFields)}
+FROM users
+```
+For example:
+```ts
+SELECT ${buildFields(["id", "name", "password", "status"], ["id", "name", "status"])}
+FROM users
+```
+
+returns:
+
+```ts
+SELECT id, name, status
+FROM users
+```
 
 ### `getMapField()`
 
-```typescript
-const column = getMapField("userId", mapping)
+`getMapField()` returns a mapped field name when a mapping exists:
+
+```ts
+const field = getMapField(
+  "user_id",
+  {
+    user_id: "id"
+  }
+)
 ```
 
-It returns the mapped name when a mapping exists, otherwise the original name.
+Result:
+
+```text
+id
+```
 
 ## Error Handling
 
@@ -1623,7 +1577,7 @@ Repository / Data Access Layer
 mssql-core
      │
      ▼
-mssql
+   mssql
      │
      ▼
 Microsoft SQL Server
